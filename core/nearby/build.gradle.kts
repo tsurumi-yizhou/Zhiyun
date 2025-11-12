@@ -1,8 +1,8 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 android {
@@ -12,9 +12,13 @@ android {
     }
 
     defaultConfig {
-        minSdk = 35
+        minSdk = 34
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
+    }
+
+    buildFeatures {
+        compose = true
     }
 
     buildTypes {
@@ -37,9 +41,7 @@ android {
     }
 
     kotlin {
-        compilerOptions {
-            jvmTarget = JvmTarget.JVM_21
-        }
+        jvmToolchain(21)
     }
 }
 

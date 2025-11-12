@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -15,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.zhiyun.code"
-        minSdk = 35
+        minSdk = 34
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -50,9 +48,7 @@ android {
     }
 
     kotlin {
-        compilerOptions {
-            jvmTarget = JvmTarget.JVM_21
-        }
+        jvmToolchain(21)
     }
 }
 
