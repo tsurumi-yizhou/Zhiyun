@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt;
 
-/// Skill identifier uniquely identifying a skill
+/// 技能标识符，唯一标识一个技能
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SkillId {
     pub category: SkillCategory,
@@ -24,23 +24,23 @@ impl SkillId {
     }
 }
 
-/// Category of the skill (dynamic string-based)
+/// 技能类别（基于动态字符串）
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SkillCategory(#[serde(deserialize_with = "deserialize_category")] pub String);
 
 impl SkillCategory {
-    /// Create a new category
+    /// 创建新类别
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
-    /// Get the category name
+    /// 获取类别名称
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    /// Common predefined categories (for backward compatibility)
+    /// 常见的预定义类别（用于向后兼容）
     pub const SYNTAX: &'static str = "Syntax";
     pub const SEMANTIC: &'static str = "Semantic";
     pub const PROJECT: &'static str = "Project";
@@ -72,13 +72,13 @@ impl AsRef<str> for SkillCategory {
     }
 }
 
-/// Custom deserializer to normalize category names
+/// 自定义反序列化器以规范化类别名称
 fn deserialize_category<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
-    // Normalize: capitalize first letter, handle snake_case
+    // 规范化：首字母大写，处理 snake_case
     Ok(s.split('_')
         .map(|word| {
             let mut chars = word.chars();
@@ -90,7 +90,7 @@ where
         .collect())
 }
 
-/// A skill definition with structured knowledge
+/// 具有结构化知识的技能定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skill {
     pub id: SkillId,
@@ -119,7 +119,7 @@ impl Skill {
     }
 }
 
-/// An example demonstrating the skill usage
+/// 演示技能使用的示例
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillExample {
     pub input: String,
@@ -127,7 +127,7 @@ pub struct SkillExample {
     pub explanation: String,
 }
 
-/// Metadata associated with a skill
+/// 与技能关联的元数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillMetadata {
     pub language: String,
@@ -136,7 +136,7 @@ pub struct SkillMetadata {
     pub tags: HashSet<String>,
 }
 
-/// Errors related to skills
+/// 与技能相关的错误
 #[derive(Debug, thiserror::Error)]
 pub enum SkillError {
     #[error("invalid skill: {0}")]
@@ -173,8 +173,8 @@ mod tests {
         let cat3: SkillCategory = "ThirdCategory".into();
 
         assert_eq!(cat1.as_str(), "CustomCategory");
-        // Note: normalization only happens during deserialization,
-        // not through From/Into trait implementations
+        // 注意：规范化仅在反序列化时发生，
+        // 而不是通过 From/Into trait 实现
         assert_eq!(cat2.as_str(), "another_category");
         assert_eq!(cat3.as_str(), "ThirdCategory");
     }

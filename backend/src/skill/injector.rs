@@ -2,14 +2,14 @@ use crate::skill::registry::SkillRegistry;
 use crate::skill::types::{Skill, SkillCategory};
 use std::sync::Arc;
 
-/// Configuration for skill injection
+/// 技能注入配置
 #[derive(Debug, Clone)]
 pub struct InjectionConfig {
-    /// Maximum number of skills to inject
+    /// 最大注入技能数量
     pub max_skills: usize,
-    /// Maximum examples per skill
+    /// 每个技能的最大示例数
     pub max_examples_per_skill: usize,
-    /// Target language for the task
+    /// 任务的目标语言
     pub target_language: Option<String>,
 }
 
@@ -23,7 +23,7 @@ impl Default for InjectionConfig {
     }
 }
 
-/// Skill injector for adding relevant skills to LLM prompts
+/// 用于将相关技能添加到 LLM 提示的技能注入器
 #[derive(Debug, Clone)]
 pub struct SkillInjector {
     registry: SkillRegistry,
@@ -42,7 +42,7 @@ impl SkillInjector {
         Self { registry, config }
     }
 
-    /// Inject relevant skills into a prompt
+    /// 将相关技能注入到提示中
     pub fn inject_to_prompt(&self, task: &str, base_prompt: &str) -> String {
         let skills = self.find_relevant_skills(task);
 
@@ -57,34 +57,34 @@ impl SkillInjector {
         )
     }
 
-    /// Find relevant skills for a task
+    /// 为任务查找相关技能
     pub fn find_relevant_skills(&self, task: &str) -> Vec<Arc<Skill>> {
         let category = self.infer_category(task);
         let language = self.config.target_language.as_deref();
 
-        // First try to find by category
+        // 首先按类别查找
         let category_skills = self.registry.by_category(category);
 
-        // Also do semantic search
+        // 同时进行语义搜索
         let semantic_skills =
             self.registry
                 .find_relevant(task, language, self.config.max_skills * 2);
 
-        // Combine and deduplicate
+        // 合并并去重
         let mut combined: Vec<_> = category_skills.into_iter().chain(semantic_skills).collect();
 
-        // Deduplicate while preserving order
+        // 去重并保持顺序
         let mut seen = std::collections::HashSet::new();
         combined.retain(|s: &Arc<Skill>| {
             let id = format!("{:?}", s.id);
             seen.insert(id)
         });
 
-        // Take top N
+        // 取前 N 个
         combined.into_iter().take(self.config.max_skills).collect()
     }
 
-    /// Format skills as markdown for prompt injection
+    /// 将技能格式化为 Markdown 用于提示注入
     pub fn format_skills(&self, skills: &[Arc<Skill>]) -> String {
         skills
             .iter()
@@ -93,20 +93,20 @@ impl SkillInjector {
             .join("\n\n---\n\n")
     }
 
-    /// Format a single skill as markdown
+    /// 将单个技能格式化为 Markdown
     pub fn format_skill(&self, skill: &Skill) -> String {
         let mut parts = vec![];
 
-        // Header
+        // 标题
         parts.push(format!("### {}", skill.name));
         parts.push(format!("*{}*", skill.description));
 
-        // Content
+        // 内容
         parts.push("".to_string());
         parts.push("**Knowledge:**".to_string());
         parts.push(skill.content.clone());
 
-        // Examples (limited)
+        // 示例（限制数量）
         if !skill.examples.is_empty() {
             parts.push("".to_string());
             parts.push("**Examples:**".to_string());
@@ -123,7 +123,7 @@ impl SkillInjector {
             }
         }
 
-        // Related tools
+        // 相关工具
         if !skill.related_tools.is_empty() {
             parts.push("".to_string());
             parts.push(format!(
@@ -135,11 +135,11 @@ impl SkillInjector {
         parts.join("\n")
     }
 
-    /// Infer the category from a task description
+    /// 从任务描述中推断类别
     pub fn infer_category(&self, task: &str) -> SkillCategory {
         let task_lower = task.to_lowercase();
 
-        // Keywords for each category
+        // 每个类别的关键词
         let syntax_keywords = [
             "parse", "syntax", "ast", "tree", "grammar", "token", "lexer",
         ];
@@ -160,7 +160,7 @@ impl SkillInjector {
             "convention",
         ];
 
-        // Count matches for each category
+        // 统计每个类别的匹配数
         let mut scores = std::collections::HashMap::new();
 
         for keyword in syntax_keywords {
@@ -187,7 +187,7 @@ impl SkillInjector {
             }
         }
 
-        // Return category with highest score, or LanguageSpecific as default
+        // 返回得分最高的类别，默认为 LanguageSpecific
         scores
             .into_iter()
             .max_by_key(|(_, score)| *score)
@@ -240,12 +240,12 @@ mod tests {
             ))
             .unwrap();
 
-        // Verify the registry has the skill
+        // 验证注册表包含该技能
         assert_eq!(registry.count(), 1);
 
         let injector = SkillInjector::new(registry);
 
-        // Use a task with syntax keyword so category inference matches
+        // 使用包含语法关键字的任务，以便类别推断匹配
         let result = injector.inject_to_prompt("Parse syntax tree", "Base prompt");
 
         assert!(result.contains("Base prompt"));

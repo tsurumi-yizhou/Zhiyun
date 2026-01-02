@@ -2,7 +2,7 @@ use crate::skill::types::{Skill, SkillCategory, SkillError, SkillId};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Registry for managing and indexing skills
+/// 用于管理和索引技能的注册表
 #[derive(Debug, Clone)]
 pub struct SkillRegistry {
     skills: HashMap<SkillId, Arc<Skill>>,
@@ -27,29 +27,29 @@ impl SkillRegistry {
         }
     }
 
-    /// Register a new skill, updating all indexes
+    /// 注册新技能，更新所有索引
     pub fn register(&mut self, skill: Skill) -> Result<(), SkillError> {
         skill.validate()?;
 
         let id = skill.id.clone();
         let skill = Arc::new(skill);
 
-        // Insert into main storage
+        // 插入主存储
         self.skills.insert(id.clone(), skill.clone());
 
-        // Update category index
+        // 更新类别索引
         self.by_category
             .entry(id.category)
             .or_default()
             .push(skill.clone());
 
-        // Update language index
+        // 更新语言索引
         self.by_language
             .entry(id.language.clone())
             .or_default()
             .push(skill.clone());
 
-        // Update tag index
+        // 更新标签索引
         for tag in &skill.metadata.tags {
             self.by_tag
                 .entry(tag.clone())
@@ -60,7 +60,7 @@ impl SkillRegistry {
         Ok(())
     }
 
-    /// Register multiple skills at once
+    /// 一次性注册多个技能
     pub fn register_all(
         &mut self,
         skills: impl IntoIterator<Item = Skill>,
@@ -91,8 +91,8 @@ impl SkillRegistry {
         self.by_tag.get(tag).cloned().unwrap_or_default()
     }
 
-    /// Find relevant skills based on task description
-    /// This is a simplified version - in production, use vector embeddings for semantic search
+    /// 根据任务描述查找相关技能
+    /// 这是简化版本 - 在生产环境中，应使用向量嵌入进行语义搜索
     pub fn find_relevant(
         &self,
         task: &str,
@@ -102,15 +102,15 @@ impl SkillRegistry {
         let mut candidates: Vec<Arc<Skill>> = Vec::new();
         let task_lower = task.to_lowercase();
 
-        // If language specified, start with language-specific skills
+        // 如果指定了语言，则从特定语言的技能开始
         if let Some(lang) = language {
             candidates.extend(self.by_language(lang));
         } else {
-            // Otherwise consider all skills
+            // 否则考虑所有技能
             candidates.extend(self.skills.values().cloned());
         }
 
-        // Simple relevance scoring based on keyword matching
+        // 基于关键字匹配的简单相关性评分
         let mut scored: Vec<_> = candidates
             .into_iter()
             .map(|skill| {
@@ -120,10 +120,10 @@ impl SkillRegistry {
             .filter(|(score, _)| *score > 0)
             .collect();
 
-        // Sort by relevance score descending
+        // 按相关性分数降序排序
         scored.sort_by(|a, b| b.0.cmp(&a.0));
 
-        // Take top N
+        // 取前 N 个
         scored
             .into_iter()
             .take(limit)
@@ -147,33 +147,33 @@ impl SkillRegistry {
     }
 }
 
-/// Calculate a simple relevance score for a skill against a task
+/// 计算技能与任务的相关性分数
 fn calculate_relevance(skill: &Skill, task: &str) -> usize {
     let mut score = 0;
 
-    // Check name match
+    // 检查名称匹配
     if skill.name.to_lowercase().contains(task) {
         score += 10;
     }
 
-    // Check description match
+    // 检查描述匹配
     if skill.description.to_lowercase().contains(task) {
         score += 5;
     }
 
-    // Check content match
+    // 检查内容匹配
     if skill.content.to_lowercase().contains(task) {
         score += 3;
     }
 
-    // Check tags match
+    // 检查标签匹配
     for tag in &skill.metadata.tags {
         if tag.to_lowercase().contains(task) {
             score += 7;
         }
     }
 
-    // Check related tools
+    // 检查相关工具
     for tool in &skill.related_tools {
         if tool.to_lowercase().contains(task) {
             score += 4;
@@ -240,16 +240,16 @@ mod tests {
 
         registry.register(skill.clone()).unwrap();
 
-        // Check category index
+        // 检查类别索引
         let by_cat = registry.by_category(SkillCategory::new("Syntax"));
         assert_eq!(by_cat.len(), 1);
         assert_eq!(by_cat[0].name, "parse_macro");
 
-        // Check language index
+        // 检查语言索引
         let by_lang = registry.by_language("Rust");
         assert_eq!(by_lang.len(), 1);
 
-        // Check tag index
+        // 检查标签索引
         let by_tag = registry.by_tag("macro");
         assert_eq!(by_tag.len(), 1);
     }
@@ -282,7 +282,7 @@ mod tests {
             ))
             .unwrap();
 
-        // Find Rust parsing skills
+        // 查找 Rust 解析技能
         let results = registry.find_relevant("parse", Some("Rust"), 10);
         assert!(!results.is_empty());
         assert!(results.iter().any(|s| s.name.contains("parse_rust")));

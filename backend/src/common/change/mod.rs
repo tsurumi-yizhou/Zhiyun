@@ -1,15 +1,15 @@
-//! # CRDT Change File System
+//! # CRDT 变动文件系统
 //!
-//! A CRDT-based distributed change file system supporting multi-agent concurrent collaboration.
+//! 一个基于 CRDT 的分布式变动文件系统，支持多代理并发协作。
 //!
-//! ## Modules
+//! ## 模块
 //!
-//! - [`change`] - Core Change data structure
-//! - [`operation`] - Operation types for different changes
-//! - [`version`] - Vector clock (version) for causality tracking
-//! - [`thread`] - Thread management (fork, merge)
-//! - [`merge`] - CRDT merge engine
-//! - [`snapshot`] - Snapshot generation from change sequences
+//! - [`change`] - 核心变动数据结构
+//! - [`operation`] - 不同变动的操作类型
+//! - [`version`] - 用于因果追踪的向量时钟（版本）
+//! - [`thread`] - 线程管理（分叉、合并）
+//! - [`merge`] - CRDT 合并引擎
+//! - [`snapshot`] - 从变动序列生成快照
 
 pub mod change;
 pub mod merge;
@@ -18,7 +18,7 @@ pub mod snapshot;
 pub mod thread;
 pub mod version;
 
-// Re-export main types for convenience
+// 为了方便重新导出主要类型
 pub use change::Change;
 pub use merge::MergeEngine;
 pub use operation::Operation;

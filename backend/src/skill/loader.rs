@@ -2,33 +2,33 @@ use crate::skill::types::{Skill, SkillCategory, SkillError, SkillExample, SkillI
 use serde::Deserialize;
 use std::path::Path;
 
-/// Configuration for loading skills
+/// 加载技能的配置
 #[derive(Debug, Clone, Deserialize)]
 pub struct SkillConfig {
-    /// List of file paths to load skills from
+    /// 用于加载技能的文件路径列表
     #[serde(default)]
     pub files: Vec<String>,
 
-    /// Inline skill definitions as JSON strings
+    /// 内联技能定义，为 JSON 字符串格式
     #[serde(default)]
     pub inline_skills: Vec<serde_json::Value>,
 }
 
-/// Skill loader for parsing skills from various sources
+/// 用于从各种来源解析技能的技能加载器
 pub struct SkillLoader;
 
 impl SkillLoader {
-    /// Load skills from a configuration
+    /// 从配置加载技能
     pub fn from_config(config: &SkillConfig) -> Result<Vec<Skill>, SkillError> {
         let mut skills = Vec::new();
 
-        // Load from files
+        // 从文件加载
         for file_path in &config.files {
             let file_skills = Self::load_from_file(Path::new(file_path))?;
             skills.extend(file_skills);
         }
 
-        // Load inline skills
+        // 加载内联技能
         for inline in &config.inline_skills {
             let skill = Self::load_from_json(inline.to_string())?;
             skills.push(skill);
@@ -37,7 +37,7 @@ impl SkillLoader {
         Ok(skills)
     }
 
-    /// Load a single skill from a file (YAML or JSON)
+    /// 从文件加载单个技能（YAML 或 JSON）
     pub fn load_from_file(path: &Path) -> Result<Vec<Skill>, SkillError> {
         let content = std::fs::read_to_string(path)?;
 
@@ -59,16 +59,16 @@ impl SkillLoader {
         }
     }
 
-    /// Load skills from a YAML string
-    /// Supports both single skill and array of skills
+    /// 从 YAML 字符串加载技能
+    /// 支持单个技能和技能数组
     pub fn load_from_yaml(content: &str) -> Result<Vec<Skill>, SkillError> {
-        // Try parsing as a single skill first
+        // 首先尝试解析为单个技能
         if let Ok(raw) = serde_yaml::from_str::<RawSkill>(content) {
             let skill = raw.into_skill()?;
             return Ok(vec![skill]);
         }
 
-        // Try parsing as an array of skills
+        // 尝试解析为技能数组
         if let Ok(raw_skills) = serde_yaml::from_str::<Vec<RawSkill>>(content) {
             let mut skills = Vec::new();
             for raw in raw_skills {
@@ -78,26 +78,26 @@ impl SkillLoader {
         }
 
         Err(SkillError::ParseError(
-            "Invalid YAML format for skill".into(),
+            "技能的 YAML 格式无效".into(),
         ))
     }
 
-    /// Load a single skill from a JSON string
+    /// 从 JSON 字符串加载单个技能
     pub fn load_from_json(content: String) -> Result<Skill, SkillError> {
         let raw: RawSkill = serde_json::from_str(&content)
-            .map_err(|e| SkillError::ParseError(format!("Invalid JSON: {}", e)))?;
+            .map_err(|e| SkillError::ParseError(format!("无效的 JSON: {}", e)))?;
         raw.into_skill()
     }
 
-    /// Load a single skill from a JSON value
+    /// 从 JSON 值加载单个技能
     pub fn load_from_json_value(value: serde_json::Value) -> Result<Skill, SkillError> {
         let raw: RawSkill = serde_json::from_value(value)
-            .map_err(|e| SkillError::ParseError(format!("Invalid JSON value: {}", e)))?;
+            .map_err(|e| SkillError::ParseError(format!("无效的 JSON 值: {}", e)))?;
         raw.into_skill()
     }
 }
 
-/// Raw skill format for deserialization
+/// 用于反序列化的原始技能格式
 #[derive(Debug, Deserialize)]
 struct RawSkill {
     id: RawSkillId,
@@ -137,7 +137,7 @@ struct RawMetadata {
 
 impl RawSkill {
     fn into_skill(self) -> Result<Skill, SkillError> {
-        // Now accepts any string as a category
+        // 现在接受任何字符串作为类别
         let category = SkillCategory::new(&self.id.category);
 
         let id = SkillId::new(category, &self.id.name, &self.id.language);
@@ -255,7 +255,7 @@ metadata:
 
     #[test]
     fn test_custom_category() {
-        // With dynamic categories, any category name is valid
+        // 使用动态类别，任何类别名称都是有效的
         let custom_yaml = r#"
 id:
   category: CustomCategory

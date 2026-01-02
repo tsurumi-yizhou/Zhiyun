@@ -233,11 +233,11 @@ mod tests {
         v1.increment(user_id);
         let c1 = Change::new(user_id, vec![Operation::insert(Some(root_id), 0, node)], v1.clone(), vec![]);
 
-        // 2. Update the node
+        // 2. 更新节点
         let mut v2 = v1.clone();
         v2.increment(user_id);
         let updated_node = MetaNode::identifier("var_b");
-        // Ensure the ID stays the same for update
+        // 确保更新时 ID 保持不变
         let updated_node = match updated_node {
             MetaNode::Identifier { name, scope_id, .. } => MetaNode::Identifier { id: node_id, name, scope_id },
             other => other,
@@ -264,7 +264,7 @@ mod tests {
         let root = MetaNode::module("root");
         let root_id = root.id();
 
-        // User A and User B both insert a node concurrently
+        // 用户 A 和用户 B 同时插入一个节点
         let node_a = MetaNode::identifier("node_a");
         let mut v_a = VectorClock::new();
         v_a.increment(user_a);
@@ -273,11 +273,11 @@ mod tests {
         let node_b = MetaNode::identifier("node_b");
         let mut v_b = VectorClock::new();
         v_b.increment(user_b);
-        // User B's change has a later timestamp
+        // 用户 B 的变动具有较晚的时间戳
         let mut c_b = Change::new(user_b, vec![Operation::insert(Some(root_id), 0, node_b)], v_b, vec![]);
         c_b.timestamp = c_a.timestamp + chrono::Duration::seconds(1);
 
-        // Merge should be deterministic regardless of input order
+        // 无论输入顺序如何，合并都应该是确定性的
         let result1 = engine.merge(root.clone(), &[c_a.clone(), c_b.clone()]).unwrap();
         let result2 = engine.merge(root.clone(), &[c_b.clone(), c_a.clone()]).unwrap();
 
@@ -285,9 +285,9 @@ mod tests {
         
         if let MetaNode::Module { children, .. } = result1 {
             assert_eq!(children.len(), 2);
-            // According to LWW and our sort, c_b (later timestamp) should be applied after c_a
-            // 1. c_a inserts node_a at index 0 -> [node_a]
-            // 2. c_b inserts node_b at index 0 -> [node_b, node_a]
+            // 根据 LWW 和我们的排序，c_b（较晚的时间戳）应该在 c_a 之后应用
+            // 1. c_a 在索引 0 处插入 node_a -> [node_a]
+            // 2. c_b 在索引 0 处插入 node_b -> [node_b, node_a]
             if let MetaNode::Identifier { name, .. } = &children[0] {
                 assert_eq!(name, "node_b");
             }

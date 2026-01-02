@@ -117,22 +117,22 @@ mod tests {
         let dir = tempdir().unwrap();
         let fs = LocalFileSystem::new(dir.path());
 
-        // Test write and read
+        // 测试写入和读取
         fs.write_file("test.txt", b"hello world").await.unwrap();
         let content = fs.read_file("test.txt").await.unwrap();
         assert_eq!(content, b"hello world");
 
-        // Test metadata
+        // 测试元数据
         let meta = fs.get_metadata("test.txt").await.unwrap();
         assert_eq!(meta.size, 11);
         assert!(!meta.is_dir);
 
-        // Test list_dir
+        // 测试列出目录
         let list = fs.list_dir("").await.unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].path, "test.txt");
 
-        // Test delete
+        // 测试删除
         fs.delete("test.txt", false).await.unwrap();
         assert!(!fs.exists("test.txt").await.unwrap());
     }

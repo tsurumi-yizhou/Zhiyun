@@ -6,21 +6,21 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::RwLock;
 
-/// Global skill state combining registry and injector
+/// 结合注册表和注入器的全局技能状态
 pub struct SkillState {
     pub registry: SkillRegistry,
     pub injector: SkillInjector,
 }
 
 impl SkillState {
-    /// Create a new skill state
+    /// 创建新的技能状态
     pub fn new() -> Self {
         let registry = SkillRegistry::new();
         let injector = SkillInjector::new(registry.clone());
         Self { registry, injector }
     }
 
-    /// Preload skills from configuration (call at program startup)
+    /// 从配置预加载技能（在程序启动时调用）
     pub async fn preload_from_config(config: &SkillConfig) -> Result<(), SkillError> {
         let skills = SkillLoader::from_config(config)?;
         let mut state = Self::get().write().await;
@@ -34,19 +34,19 @@ impl Default for SkillState {
     }
 }
 
-/// Global state singleton using OnceLock
+/// 使用 OnceLock 的全局状态单例
 static GLOBAL_STATE: OnceLock<Arc<RwLock<SkillState>>> = OnceLock::new();
 
 impl SkillState {
-    /// Get the global state instance
+    /// 获取全局状态实例
     pub fn get() -> &'static Arc<RwLock<SkillState>> {
         GLOBAL_STATE.get_or_init(|| Arc::new(RwLock::new(Self::new())))
     }
 
-    /// Reset the global state (useful for testing)
+    /// 重置全局状态（用于测试）
     pub fn reset() {
-        // Note: OnceLock doesn't support reset, this is a no-op in production
-        // In tests, you'd need to use a different approach
+        // 注意：OnceLock 不支持重置，这在生产环境中是无操作
+        // 在测试中，需要使用不同的方法
     }
 }
 
@@ -86,7 +86,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_global_state_singleton() {
-        // Get global state and register a skill
+        // 获取全局状态并注册一个技能
         let state1 = SkillState::get().read().await;
         let skill = create_test_skill("test_singleton");
         let id = skill.id.clone();
@@ -96,7 +96,7 @@ mod tests {
         state2.registry.register(skill).unwrap();
         drop(state2);
 
-        // Verify the skill is still there
+        // 验证技能仍然存在
         let state3 = SkillState::get().read().await;
         assert!(state3.registry.contains(&id));
     }
@@ -105,7 +105,7 @@ mod tests {
     async fn test_preload_from_config() {
         use serde_json::json;
 
-        // Get initial count
+        // 获取初始计数
         let state = SkillState::get().read().await;
         let initial_count = state.registry.count();
         drop(state);
@@ -133,8 +133,8 @@ mod tests {
 
         SkillState::preload_from_config(&config).await.unwrap();
 
-        // Check that at least one new skill was loaded
-        // (can't use exact count due to parallel tests sharing global state)
+        // 检查是否至少加载了一个新技能
+        // （由于并行测试共享全局状态，无法使用确切计数）
         let state = SkillState::get().read().await;
         assert!(
             state.registry.count() >= initial_count,

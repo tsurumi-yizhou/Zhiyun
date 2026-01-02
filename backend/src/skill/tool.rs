@@ -8,7 +8,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Tool execution result
+/// 工具执行结果
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ToolOutput {
     pub content: String,
@@ -16,24 +16,24 @@ pub struct ToolOutput {
     pub data: Option<Value>,
 }
 
-/// Unified tool interface for LLM function calling
+/// 用于 LLM 函数调用的统一工具接口
 #[async_trait(?Send)]
 pub trait Tool: Send + Sync {
-    /// Tool name (for LLM function calling)
+    /// 工具名称（用于 LLM 函数调用）
     fn name(&self) -> &'static str;
 
-    /// Tool description (for LLM to understand usage)
+    /// 工具描述（用于 LLM 理解使用方法）
     fn description(&self) -> &'static str;
 
-    /// Parameter schema (JSON Schema for validation)
+    /// 参数模式（用于验证的 JSON Schema）
     fn parameter_schema(&self) -> Value;
 
-    /// Execute the tool
+    /// 执行工具
     async fn execute(&self, args: Value) -> Result<ToolOutput, SkillError>;
 }
 
 // ============================================================================
-// Tool 1: Register Skill
+// 工具 1: 注册技能
 // ============================================================================
 
 pub struct RegisterSkillTool;
@@ -54,7 +54,7 @@ impl Tool for RegisterSkillTool {
             "properties": {
                 "skill": {
                     "type": "object",
-                    "description": "Skill definition (same format as YAML/JSON file)"
+                    "description": "技能定义（与 YAML/JSON 文件格式相同）"
                 }
             },
             "required": ["skill"]
@@ -83,7 +83,7 @@ impl Tool for RegisterSkillTool {
 }
 
 // ============================================================================
-// Tool 2: Search Skills
+// 工具 2: 搜索技能
 // ============================================================================
 
 pub struct SearchSkillsTool;
@@ -95,7 +95,7 @@ impl Tool for SearchSkillsTool {
     }
 
     fn description(&self) -> &'static str {
-        "Search for skills relevant to a task. Returns matching skills with their descriptions."
+        "搜索与任务相关的技能。返回匹配的技能及其描述。"
     }
 
     fn parameter_schema(&self) -> Value {
@@ -104,15 +104,15 @@ impl Tool for SearchSkillsTool {
             "properties": {
                 "task": {
                     "type": "string",
-                    "description": "Task description to find relevant skills for"
+                    "description": "任务描述，用于查找相关技能"
                 },
                 "language": {
                     "type": "string",
-                    "description": "Target programming language (optional)"
+                    "description": "目标编程语言（可选）"
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Maximum number of skills to return",
+                    "description": "返回的最大技能数量",
                     "default": 5
                 }
             },
@@ -152,7 +152,7 @@ impl Tool for SearchSkillsTool {
 }
 
 // ============================================================================
-// Tool 3: Inject Skills
+// 工具 3: 注入技能
 // ============================================================================
 
 pub struct InjectSkillsTool;
@@ -164,7 +164,7 @@ impl Tool for InjectSkillsTool {
     }
 
     fn description(&self) -> &'static str {
-        "Inject relevant skills into a prompt to enhance LLM understanding. Returns the augmented prompt."
+        "将相关技能注入到提示中以增强 LLM 理解。返回增强后的提示。"
     }
 
     fn parameter_schema(&self) -> Value {
@@ -173,15 +173,15 @@ impl Tool for InjectSkillsTool {
             "properties": {
                 "task": {
                     "type": "string",
-                    "description": "Task description"
+                    "description": "任务描述"
                 },
                 "base_prompt": {
                     "type": "string",
-                    "description": "Original prompt to augment"
+                    "description": "要增强的原始提示"
                 },
                 "max_skills": {
                     "type": "integer",
-                    "description": "Maximum skills to inject",
+                    "description": "最大注入技能数",
                     "default": 5
                 }
             },
@@ -208,7 +208,7 @@ impl Tool for InjectSkillsTool {
 }
 
 // ============================================================================
-// Tool 4: Get Skill
+// 工具 4: 获取技能
 // ============================================================================
 
 pub struct GetSkillTool;
@@ -220,7 +220,7 @@ impl Tool for GetSkillTool {
     }
 
     fn description(&self) -> &'static str {
-        "Get a specific skill by its category, name, and language."
+        "根据类别、名称和语言获取特定技能。"
     }
 
     fn parameter_schema(&self) -> Value {
@@ -229,15 +229,15 @@ impl Tool for GetSkillTool {
             "properties": {
                 "category": {
                     "type": "string",
-                    "description": "Skill category (e.g., Syntax, Semantic, Project, etc.)"
+                    "description": "技能类别（例如：Syntax、Semantic、Project 等）"
                 },
                 "name": {
                     "type": "string",
-                    "description": "Skill name"
+                    "description": "技能名称"
                 },
                 "language": {
                     "type": "string",
-                    "description": "Programming language"
+                    "description": "编程语言"
                 }
             },
             "required": ["category", "name", "language"]
@@ -289,7 +289,7 @@ impl Tool for GetSkillTool {
 }
 
 // ============================================================================
-// Tool 5: List Skills
+// 工具 5: 列出技能
 // ============================================================================
 
 pub struct ListSkillsTool;
@@ -301,7 +301,7 @@ impl Tool for ListSkillsTool {
     }
 
     fn description(&self) -> &'static str {
-        "List all registered skills, optionally filtered by category or language."
+        "列出所有已注册的技能，可按类别或语言筛选。"
     }
 
     fn parameter_schema(&self) -> Value {
@@ -310,11 +310,11 @@ impl Tool for ListSkillsTool {
             "properties": {
                 "category": {
                     "type": "string",
-                    "description": "Filter by category (optional)"
+                    "description": "按类别筛选（可选）"
                 },
                 "language": {
                     "type": "string",
-                    "description": "Filter by language (optional)"
+                    "description": "按语言筛选（可选）"
                 }
             }
         })
@@ -352,16 +352,16 @@ impl Tool for ListSkillsTool {
 }
 
 // ============================================================================
-// Tool Registry
+// 工具注册表
 // ============================================================================
 
-/// Registry for all skill tools
+/// 所有技能工具的注册表
 pub struct SkillToolRegistry {
     tools: HashMap<&'static str, Arc<dyn Tool>>,
 }
 
 impl SkillToolRegistry {
-    /// Create a new tool registry with all skill tools registered
+    /// 创建一个新的工具注册表，注册所有技能工具
     pub fn new() -> Self {
         let mut tools = HashMap::new();
         tools.insert(
@@ -375,17 +375,17 @@ impl SkillToolRegistry {
         Self { tools }
     }
 
-    /// Get a tool by name
+    /// 根据名称获取工具
     pub fn get(&self, name: &str) -> Option<Arc<dyn Tool>> {
         self.tools.get(name).cloned()
     }
 
-    /// Get all tools as a map
+    /// 获取所有工具作为映射
     pub fn get_all(&self) -> &HashMap<&'static str, Arc<dyn Tool>> {
         &self.tools
     }
 
-    /// Get all tool schemas (for LLM function calling)
+    /// 获取所有工具模式（用于 LLM 函数调用）
     pub fn get_all_schemas(&self) -> Vec<Value> {
         self.tools
             .values()
@@ -399,7 +399,7 @@ impl SkillToolRegistry {
             .collect()
     }
 
-    /// Execute a tool by name
+    /// 根据名称执行工具
     pub async fn execute(&self, name: &str, args: Value) -> Result<ToolOutput, SkillError> {
         let tool = self
             .get(name)
@@ -415,7 +415,7 @@ impl Default for SkillToolRegistry {
 }
 
 // ============================================================================
-// Tests
+// 测试
 // ============================================================================
 
 #[cfg(test)]
@@ -450,7 +450,7 @@ mod tests {
         let tool = RegisterSkillTool;
         assert_eq!(tool.name(), "register_skill");
 
-        // Get initial count
+        // 获取初始计数
         let state = SkillState::get().read().await;
         let initial_count = state.registry.count();
         drop(state);
@@ -477,8 +477,8 @@ mod tests {
 
         assert!(result.content.contains("registered successfully"));
 
-        // Check that at least one new skill was registered
-        // (can't use exact count due to parallel tests sharing global state)
+        // 检查是否至少注册了一个新技能
+        // （由于并行测试共享全局状态，无法使用确切计数）
         let state = SkillState::get().read().await;
         assert!(
             state.registry.count() >= initial_count,
@@ -490,7 +490,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_skills_tool() {
-        // Register a skill with a unique name for this test
+        // 为此测试注册一个具有唯一名称的技能
         let unique_name = "search_test_unique_parse_rust";
         let mut state = SkillState::get().write().await;
         state
@@ -513,7 +513,7 @@ mod tests {
         if let Some(data) = result.data {
             let skills: Vec<Value> = serde_json::from_value(data).unwrap();
             assert!(!skills.is_empty());
-            // Check that our registered skill is in the results
+            // 检查我们注册的技能是否在结果中
             let found = skills.iter().any(|s| s["name"] == unique_name);
             assert!(found, "Should find the registered skill");
         }
@@ -521,7 +521,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_skill_tool() {
-        // First register a skill
+        // 首先注册一个技能
         let mut state = SkillState::get().write().await;
         state
             .registry
@@ -548,7 +548,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_skills_tool() {
-        // Register some skills
+        // 注册一些技能
         let mut state = SkillState::get().write().await;
         state
             .registry
@@ -574,14 +574,14 @@ mod tests {
     async fn test_tool_registry() {
         let registry = SkillToolRegistry::new();
 
-        // Check all tools are registered
+        // 检查是否所有工具都已注册
         assert_eq!(registry.get_all().len(), 5);
 
-        // Get schemas
+        // 获取模式
         let schemas = registry.get_all_schemas();
         assert_eq!(schemas.len(), 5);
 
-        // Execute a tool
+        // 执行工具
         let result = registry
             .execute(
                 "list_skills",
