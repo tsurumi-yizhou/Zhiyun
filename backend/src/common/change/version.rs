@@ -1,118 +1,94 @@
-//! # Version module
-//!
-//! Implements vector clocks (versions) for tracking causality between changes.
-
-pub use crate::common::change::change::AgentId;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+use std::cmp::Ordering;
 
-/// A vector clock tracks the causal history of changes across agents
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// 因果关系定义
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Relation {
+    /// 发生在前 (self < other)
+    Before,
+    /// 发生在后 (self > other)
+    After,
+    /// 相等 (self == other)
+    Equal,
+    /// 并发/冲突 (无法确定顺序)
+    Concurrent,
+}
+
+/// 向量时钟，用于因果追踪
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct VectorClock {
-    /// Map from agent ID to their logical timestamp
-    clock: HashMap<AgentId, u64>,
+    pub clocks: HashMap<Uuid, u64>,
 }
 
 impl VectorClock {
-    /// Create a new empty vector clock
     pub fn new() -> Self {
-        Self {
-            clock: HashMap::new(),
-        }
+        Self::default()
     }
 
-    /// Increment the counter for a specific agent
-    pub fn increment(&mut self, agent: &AgentId) {
-        *self.clock.entry(agent.clone()).or_insert(0) += 1;
+    /// 增加指定节点的时钟计数
+    pub fn increment(&mut self, node_id: Uuid) {
+        let count = self.clocks.entry(node_id).or_insert(0);
+        *count += 1;
     }
 
-    /// Set the counter for a specific agent
-    pub fn set(&mut self, agent: &AgentId, value: u64) {
-        self.clock.insert(agent.clone(), value);
+    /// 获取指定节点的时钟值
+    pub fn get(&self, node_id: &Uuid) -> u64 {
+        *self.clocks.get(node_id).unwrap_or(&0)
     }
 
-    /// Get the counter for a specific agent
-    pub fn get(&self, agent: &AgentId) -> Option<&u64> {
-        self.clock.get(agent)
-    }
-
-    /// Merge this vector clock with another (element-wise max)
+    /// 合并另一个向量时钟（取各节点最大值）
     pub fn merge(&mut self, other: &VectorClock) {
-        for (agent, &value) in &other.clock {
-            let entry = self.clock.entry(agent.clone()).or_insert(0);
-            *entry = (*entry).max(value);
+        for (node_id, clock) in &other.clocks {
+            let entry = self.clocks.entry(*node_id).or_insert(0);
+            if *clock > *entry {
+                *entry = *clock;
+            }
         }
     }
 
-    /// Compare two vector clocks to determine causal relationship
-    ///
-    /// Returns `None` if the clocks are concurrent (incomparable)
-    /// Returns `Some(Ordering::Less)` if self < other (self happened before other)
-    /// Returns `Some(Ordering::Greater)` if self > other (other happened before self)
-    /// Returns `Some(Ordering::Equal)` if self == other (same causal history)
-    pub fn compare(&self, other: &VectorClock) -> Option<std::cmp::Ordering> {
-        let mut less = false;
-        let mut greater = false;
+    /// 比较两个向量时钟的因果关系
+    pub fn compare(&self, other: &VectorClock) -> Relation {
+        let mut self_has_greater = false;
+        let mut other_has_greater = false;
 
-        let all_agents: std::collections::HashSet<_> =
-            self.clock.keys().chain(other.clock.keys()).collect();
+        // 获取所有出现过的节点 ID
+        let mut all_nodes: std::collections::HashSet<&Uuid> = self.clocks.keys().collect();
+        all_nodes.extend(other.clocks.keys());
 
-        for agent in all_agents {
-            let self_val = self.get(agent).copied().unwrap_or(0);
-            let other_val = other.get(agent).copied().unwrap_or(0);
+        for node_id in all_nodes {
+            let self_val = self.get(node_id);
+            let other_val = other.get(node_id);
 
-            if self_val < other_val {
-                less = true;
-            } else if self_val > other_val {
-                greater = true;
-            }
-
-            // If both are true, they're concurrent
-            if less && greater {
-                return None;
+            match self_val.cmp(&other_val) {
+                Ordering::Greater => self_has_greater = true,
+                Ordering::Less => other_has_greater = true,
+                Ordering::Equal => {}
             }
         }
 
-        match (less, greater) {
-            (true, false) => Some(std::cmp::Ordering::Less),
-            (false, true) => Some(std::cmp::Ordering::Greater),
-            (false, false) => Some(std::cmp::Ordering::Equal),
-            (true, true) => unreachable!(),
+        match (self_has_greater, other_has_greater) {
+            (true, true) => Relation::Concurrent,
+            (true, false) => Relation::After,
+            (false, true) => Relation::Before,
+            (false, false) => Relation::Equal,
         }
     }
 
-    /// Check if this vector clock dominates another (self >= other)
-    pub fn dominates(&self, other: &VectorClock) -> bool {
-        matches!(
-            self.compare(other),
-            Some(std::cmp::Ordering::Greater) | Some(std::cmp::Ordering::Equal)
-        )
+    /// 检查 self 是否在因果上先于 other
+    pub fn is_before(&self, other: &VectorClock) -> bool {
+        self.compare(other) == Relation::Before
     }
 
-    /// Check if two vector clocks are concurrent
-    pub fn is_concurrent_with(&self, other: &VectorClock) -> bool {
-        self.compare(other).is_none()
+    /// 检查 self 是否在因果上后于 other
+    pub fn is_after(&self, other: &VectorClock) -> bool {
+        self.compare(other) == Relation::After
     }
 
-    /// Get the number of agents tracked
-    pub fn len(&self) -> usize {
-        self.clock.len()
-    }
-
-    /// Check if the vector clock is empty
-    pub fn is_empty(&self) -> bool {
-        self.clock.is_empty()
-    }
-
-    /// Get an iterator over the clock entries
-    pub fn iter(&self) -> impl Iterator<Item = (&AgentId, &u64)> {
-        self.clock.iter()
-    }
-}
-
-impl Default for VectorClock {
-    fn default() -> Self {
-        Self::new()
+    /// 检查 self 是否与 other 并发
+    pub fn is_concurrent(&self, other: &VectorClock) -> bool {
+        self.compare(other) == Relation::Concurrent
     }
 }
 
@@ -121,127 +97,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_vector_clock_creation() {
-        let vc = VectorClock::new();
-        assert!(vc.is_empty());
-    }
+    fn test_vector_clock_causality() {
+        let node_a = Uuid::new_v4();
+        let node_b = Uuid::new_v4();
 
-    #[test]
-    fn test_increment() {
-        let mut vc = VectorClock::new();
-        vc.increment(&"agent1".to_string());
+        let mut v1 = VectorClock::new();
+        v1.increment(node_a); // v1: {A:1}
 
-        assert_eq!(vc.get(&"agent1".to_string()), Some(&1));
-        assert_eq!(vc.len(), 1);
-    }
+        let mut v2 = v1.clone();
+        v2.increment(node_a); // v2: {A:2}
 
-    #[test]
-    fn test_multiple_increments() {
-        let mut vc = VectorClock::new();
-        vc.increment(&"agent1".to_string());
-        vc.increment(&"agent1".to_string());
-        vc.increment(&"agent2".to_string());
+        assert_eq!(v1.compare(&v2), Relation::Before);
+        assert_eq!(v2.compare(&v1), Relation::After);
 
-        assert_eq!(vc.get(&"agent1".to_string()), Some(&2));
-        assert_eq!(vc.get(&"agent2".to_string()), Some(&1));
-    }
+        let mut v3 = v1.clone();
+        v3.increment(node_b); // v3: {A:1, B:1}
 
-    #[test]
-    fn test_set() {
-        let mut vc = VectorClock::new();
-        vc.set(&"agent1".to_string(), 10);
+        // v2 和 v3 是并发的
+        assert_eq!(v2.compare(&v3), Relation::Concurrent);
+        assert!(v2.is_concurrent(&v3));
 
-        assert_eq!(vc.get(&"agent1".to_string()), Some(&10));
-    }
-
-    #[test]
-    fn test_merge() {
-        let mut vc1 = VectorClock::new();
-        vc1.set(&"agent1".to_string(), 5);
-        vc1.set(&"agent2".to_string(), 3);
-
-        let mut vc2 = VectorClock::new();
-        vc2.set(&"agent1".to_string(), 3);
-        vc2.set(&"agent2".to_string(), 7);
-        vc2.set(&"agent3".to_string(), 1);
-
-        vc1.merge(&vc2);
-
-        assert_eq!(vc1.get(&"agent1".to_string()), Some(&5)); // max(5, 3)
-        assert_eq!(vc1.get(&"agent2".to_string()), Some(&7)); // max(3, 7)
-        assert_eq!(vc1.get(&"agent3".to_string()), Some(&1)); // from vc2
-    }
-
-    #[test]
-    fn test_compare_equal() {
-        let mut vc1 = VectorClock::new();
-        let mut vc2 = VectorClock::new();
-
-        vc1.set(&"agent1".to_string(), 5);
-        vc2.set(&"agent1".to_string(), 5);
-
-        assert_eq!(vc1.compare(&vc2), Some(std::cmp::Ordering::Equal));
-    }
-
-    #[test]
-    fn test_compare_less() {
-        let mut vc1 = VectorClock::new();
-        let mut vc2 = VectorClock::new();
-
-        vc1.set(&"agent1".to_string(), 3);
-        vc2.set(&"agent1".to_string(), 5);
-
-        assert_eq!(vc1.compare(&vc2), Some(std::cmp::Ordering::Less));
-    }
-
-    #[test]
-    fn test_compare_greater() {
-        let mut vc1 = VectorClock::new();
-        let mut vc2 = VectorClock::new();
-
-        vc1.set(&"agent1".to_string(), 5);
-        vc2.set(&"agent1".to_string(), 3);
-
-        assert_eq!(vc1.compare(&vc2), Some(std::cmp::Ordering::Greater));
-    }
-
-    #[test]
-    fn test_compare_concurrent() {
-        let mut vc1 = VectorClock::new();
-        let mut vc2 = VectorClock::new();
-
-        vc1.set(&"agent1".to_string(), 5);
-        vc2.set(&"agent2".to_string(), 5);
-
-        // Concurrent: agent1 > agent2 in vc1, but agent2 > agent1 in vc2
-        assert!(vc1.is_concurrent_with(&vc2));
-        assert_eq!(vc1.compare(&vc2), None);
-    }
-
-    #[test]
-    fn test_dominates() {
-        let mut vc1 = VectorClock::new();
-        let mut vc2 = VectorClock::new();
-
-        vc1.set(&"agent1".to_string(), 5);
-        vc1.set(&"agent2".to_string(), 3);
-
-        vc2.set(&"agent1".to_string(), 3);
-        vc2.set(&"agent2".to_string(), 2);
-
-        assert!(vc1.dominates(&vc2));
-        assert!(!vc2.dominates(&vc1));
-    }
-
-    #[test]
-    fn test_serialization() {
-        let mut vc = VectorClock::new();
-        vc.set(&"agent1".to_string(), 5);
-
-        let serialized = serde_json::to_string(&vc).unwrap();
-        let deserialized: VectorClock = serde_json::from_str(&serialized).unwrap();
-
-        assert_eq!(vc, deserialized);
+        let mut v4 = v2.clone();
+        v4.merge(&v3); // v4: {A:2, B:1}
+        assert_eq!(v2.compare(&v4), Relation::Before);
+        assert_eq!(v3.compare(&v4), Relation::Before);
     }
 }
-

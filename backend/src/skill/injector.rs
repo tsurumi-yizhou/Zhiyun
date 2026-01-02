@@ -303,4 +303,3 @@ mod tests {
         assert_eq!(result, "Base prompt");
     }
 }
-

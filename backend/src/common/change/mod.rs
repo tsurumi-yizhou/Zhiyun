@@ -25,4 +25,3 @@ pub use operation::Operation;
 pub use snapshot::Snapshot;
 pub use thread::Thread;
 pub use version::VectorClock;
-

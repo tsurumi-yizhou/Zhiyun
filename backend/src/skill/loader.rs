@@ -276,4 +276,3 @@ metadata:
         assert_eq!(skills[0].id.category.as_str(), "CustomCategory");
     }
 }
-

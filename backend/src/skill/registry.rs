@@ -300,4 +300,3 @@ mod tests {
         assert_eq!(registry.count(), 2);
     }
 }
-

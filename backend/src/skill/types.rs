@@ -231,4 +231,3 @@ mod tests {
         assert_eq!(cat.to_string(), "MyCategory");
     }
 }
-

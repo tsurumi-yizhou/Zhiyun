@@ -1,257 +1,215 @@
-//! # Merge module
-//!
-//! CRDT merge engine for combining changes from multiple threads.
-
-use crate::common::change::change::{Change, ChangeId};
+use crate::common::change::change::Change;
 use crate::common::change::operation::Operation;
-use std::collections::{HashMap, HashSet};
+use crate::common::change::version::Relation;
+use crate::common::meta::ast::MetaNode;
+use uuid::Uuid;
 
-/// Result of a merge operation
-#[derive(Debug, Clone, PartialEq)]
-pub enum MergeResult {
-    /// Changes merged successfully
-    Success { changes: Vec<Change> },
-    /// Conflict detected but resolved
-    ConflictResolved {
-        changes: Vec<Change>,
-        conflicts: usize,
-    },
-    /// Merge failed due to unresolvable conflict
-    Failed { reason: String },
-}
-
-/// Engine for merging changes using CRDT algorithms
-#[derive(Debug, Clone)]
-pub struct MergeEngine;
+/// CRDT 合并引擎
+/// 采用因果排序 (Causal Ordering) 和 LWW (Last-Write-Wins) 策略
+pub struct MergeEngine {}
 
 impl MergeEngine {
-    /// Create a new merge engine
     pub fn new() -> Self {
-        Self
+        Self {}
     }
 
-    /// Merge two sequences of changes
-    ///
-    /// Takes two lists of changes and merges them based on their causal relationships
-    pub fn merge(&mut self, left: &[Change], right: &[Change]) -> MergeResult {
-        let mut result = Vec::new();
-        let mut conflicts = 0;
-
-        // Index changes by ID for lookup
-        let left_index: HashMap<ChangeId, &Change> = left.iter().map(|c| (c.id, c)).collect();
-        let right_index: HashMap<ChangeId, &Change> = right.iter().map(|c| (c.id, c)).collect();
-
-        // Track which changes we've included
-        let mut included = HashSet::new();
-
-        // Collect all unique change IDs
-        let all_ids: HashSet<ChangeId> = left
-            .iter()
-            .map(|c| c.id)
-            .chain(right.iter().map(|c| c.id))
-            .collect();
-
-        // Sort changes by dependencies using topological sort
-        let sorted = self.topological_sort(&left_index, &right_index, &all_ids);
-
-        for change_id in sorted {
-            // Skip if already included
-            if included.contains(&change_id) {
-                continue;
-            }
-
-            // Check if this change exists in both branches (concurrent modification)
-            let left_change = left_index.get(&change_id);
-            let right_change = right_index.get(&change_id);
-
-            match (left_change, right_change) {
-                (Some(&lc), Some(_rc)) => {
-                    // Same change in both - include once
-                    result.push(lc.clone());
-                    included.insert(change_id);
-                }
-                (Some(&lc), None) | (None, Some(&lc)) => {
-                    // Change only in one branch - include
-                    result.push(lc.clone());
-                    included.insert(change_id);
-                }
-                (None, None) => {
-                    // Shouldn't happen if we sorted correctly
-                    continue;
-                }
-            }
-        }
-
-        // Check for operation-level conflicts
-        for (i, change1) in result.iter().enumerate() {
-            for change2 in result.iter().skip(i + 1) {
-                if self.has_operation_conflict(change1, change2) {
-                    conflicts += 1;
-                }
-            }
-        }
-
-        if conflicts > 0 {
-            MergeResult::ConflictResolved {
-                changes: result,
-                conflicts,
-            }
-        } else {
-            MergeResult::Success { changes: result }
-        }
-    }
-
-    /// Find the lowest common ancestor of two changes
-    pub fn find_common_ancestor(
-        &self,
-        change1: &Change,
-        change2: &Change,
-        all_changes: &HashMap<ChangeId, Change>,
-    ) -> Option<ChangeId> {
-        // Collect ancestors of change1
-        let mut ancestors1 = HashSet::new();
-        let mut to_visit = vec![change1.id];
-        while let Some(id) = to_visit.pop() {
-            if ancestors1.contains(&id) {
-                continue;
-            }
-            ancestors1.insert(id);
-            if let Some(c) = all_changes.get(&id) {
-                to_visit.extend(c.parents.iter());
-            }
-        }
-
-        // Find first ancestor of change2 that's also in ancestors1
-        let mut to_visit = vec![change2.id];
-        while let Some(id) = to_visit.pop() {
-            if ancestors1.contains(&id) {
-                return Some(id);
-            }
-            if let Some(c) = all_changes.get(&id) {
-                to_visit.extend(c.parents.iter());
-            }
-        }
-
-        None
-    }
-
-    /// Check if two operations conflict
-    fn has_operation_conflict(&self, change1: &Change, change2: &Change) -> bool {
-        match (&change1.operation, &change2.operation) {
-            // Concurrent inserts at the same position conflict
-            (Operation::Insert { position: p1, .. }, Operation::Insert { position: p2, .. }) => {
-                p1 == p2
-            }
-            // Deletes that overlap conflict
-            (
-                Operation::Delete {
-                    position: p1,
-                    length: l1,
-                },
-                Operation::Delete {
-                    position: p2,
-                    length: l2,
-                },
-            ) => *p1 < *p2 + *l2 && *p2 < *p1 + *l1,
-            // Updates to the same path conflict
-            (Operation::Update { path: p1, .. }, Operation::Update { path: p2, .. }) => p1 == p2,
-            // Other combinations are considered non-conflicting for now
-            _ => false,
-        }
-    }
-
-    /// Topological sort of changes based on dependencies
-    fn topological_sort(
-        &self,
-        left_index: &HashMap<ChangeId, &Change>,
-        right_index: &HashMap<ChangeId, &Change>,
-        all_ids: &HashSet<ChangeId>,
-    ) -> Vec<ChangeId> {
-        let mut result = Vec::new();
-        let mut visited = HashSet::new();
-
-        let all_changes: HashMap<ChangeId, &Change> = left_index
-            .iter()
-            .chain(right_index.iter())
-            .map(|(&id, &change)| (id, change))
-            .collect();
-
-        // Build children map (reverse of parents)
-        let mut children: HashMap<ChangeId, Vec<ChangeId>> = HashMap::new();
-        let mut in_degree: HashMap<ChangeId, usize> = HashMap::new();
-
-        for &id in all_ids {
-            in_degree.insert(id, 0);
-            children.insert(id, Vec::new());
-        }
-
-        for change in all_changes.values() {
-            for &parent in &change.parents {
-                if all_ids.contains(&parent) {
-                    *in_degree.entry(change.id).or_insert(0) += 1;
-                    children.entry(parent).or_default().push(change.id);
-                }
-            }
-        }
-
-        // Start with nodes that have no parents (in_degree = 0)
-        let mut queue: Vec<ChangeId> = in_degree
-            .iter()
-            .filter(|(_, degree)| **degree == 0)
-            .map(|(&id, _)| id)
-            .collect();
-
-        while let Some(id) = queue.pop() {
-            if visited.contains(&id) {
-                continue;
-            }
-            visited.insert(id);
-            result.push(id);
-
-            // Add children that now have all parents processed
-            if let Some(child_list) = children.get(&id) {
-                for &child in child_list {
-                    if !visited.contains(&child) {
-                        queue.push(child);
+    /// 对变动列表进行因果排序
+    pub fn sort_changes(&self, changes: Vec<Change>) -> Vec<Change> {
+        let mut sorted = changes;
+        sorted.sort_by(|a, b| {
+            match a.version.compare(&b.version) {
+                Relation::Before => std::cmp::Ordering::Less,
+                Relation::After => std::cmp::Ordering::Greater,
+                Relation::Equal => a.timestamp.cmp(&b.timestamp),
+                Relation::Concurrent => {
+                    // 并发冲突：使用时间戳作为第一决胜局，ID 作为第二决胜局
+                    match a.timestamp.cmp(&b.timestamp) {
+                        std::cmp::Ordering::Equal => a.id.cmp(&b.id),
+                        other => other,
                     }
                 }
             }
+        });
+        sorted
+    }
+
+    /// 合并变动序列并投影到 MetaNode 树
+    pub fn merge(&self, initial_state: MetaNode, changes: &[Change]) -> anyhow::Result<MetaNode> {
+        let mut root = initial_state;
+        let sorted_changes = self.sort_changes(changes.to_vec());
+
+        for change in sorted_changes {
+            for op in &change.operations {
+                self.apply_operation(&mut root, op)?;
+            }
         }
 
-        result
+        Ok(root)
     }
 
-    /// Create a merge change representing the merge operation itself
-    pub fn create_merge_change(
-        &self,
-        author: String,
-        left_head: ChangeId,
-        right_head: ChangeId,
-        merged_changes: Vec<ChangeId>,
-    ) -> Change {
-        Change::new(
-            author,
-            Operation::Custom {
-                operation_type: "merge".to_string(),
-                data: vec![
-                    ("left_head".to_string(), serde_json::json!(left_head)),
-                    ("right_head".to_string(), serde_json::json!(right_head)),
-                    (
-                        "merged_changes".to_string(),
-                        serde_json::json!(merged_changes),
-                    ),
-                ]
-                .into_iter()
-                .collect(),
-            },
-            vec![left_head, right_head],
-        )
+    fn apply_operation(&self, root: &mut MetaNode, op: &Operation) -> anyhow::Result<()> {
+        match op {
+            Operation::Insert { parent_id, index, node } => {
+                if let Some(pid) = parent_id {
+                    if let Some(parent) = self.find_node_mut(root, *pid) {
+                        self.insert_into_node(parent, *index, node.clone())?;
+                    }
+                } else {
+                    // 如果没有 parent_id，尝试插入到根节点的子列表中（如果根节点支持子节点）
+                    self.insert_into_node(root, *index, node.clone())?;
+                }
+            }
+            Operation::Update { node_id, new_node } => {
+                if let Some(node) = self.find_node_mut(root, *node_id) {
+                    *node = new_node.clone();
+                }
+            }
+            Operation::Delete { node_id } => {
+                self.delete_node(root, *node_id);
+            }
+            Operation::Move { node_id, new_parent_id, new_index } => {
+                // 简化实现：先删除再插入
+                if let Some(node) = self.take_node(root, *node_id) {
+                    if let Some(pid) = new_parent_id {
+                        if let Some(parent) = self.find_node_mut(root, *pid) {
+                            self.insert_into_node(parent, *new_index, node)?;
+                        }
+                    } else {
+                        self.insert_into_node(root, *new_index, node)?;
+                    }
+                }
+            }
+            Operation::Mock { .. } => {}
+        }
+        Ok(())
     }
-}
 
-impl Default for MergeEngine {
-    fn default() -> Self {
-        Self::new()
+    fn find_node_mut<'a>(&self, current: &'a mut MetaNode, id: Uuid) -> Option<&'a mut MetaNode> {
+        if current.id() == id {
+            return Some(current);
+        }
+
+        match current {
+            MetaNode::Module { children, .. } => {
+                for child in children {
+                    if let Some(found) = self.find_node_mut(child, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            MetaNode::Function { params, body, .. } => {
+                for param in params {
+                    if let Some(found) = self.find_node_mut(param, id) {
+                        return Some(found);
+                    }
+                }
+                if let Some(b) = body {
+                    if let Some(found) = self.find_node_mut(b, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            MetaNode::Class { members, .. } => {
+                for member in members {
+                    if let Some(found) = self.find_node_mut(member, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            MetaNode::Block { statements, .. } => {
+                for stmt in statements {
+                    if let Some(found) = self.find_node_mut(stmt, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+
+    fn insert_into_node(&self, parent: &mut MetaNode, index: usize, node: MetaNode) -> anyhow::Result<()> {
+        match parent {
+            MetaNode::Module { children, .. } => {
+                let idx = index.min(children.len());
+                children.insert(idx, node);
+            }
+            MetaNode::Block { statements, .. } => {
+                let idx = index.min(statements.len());
+                statements.insert(idx, node);
+            }
+            MetaNode::Class { members, .. } => {
+                let idx = index.min(members.len());
+                members.insert(idx, node);
+            }
+            _ => return Err(anyhow::anyhow!("Node does not support children")),
+        }
+        Ok(())
+    }
+
+    fn delete_node(&self, parent: &mut MetaNode, id: Uuid) -> bool {
+        match parent {
+            MetaNode::Module { children, .. } => {
+                if let Some(pos) = children.iter().position(|c| c.id() == id) {
+                    children.remove(pos);
+                    return true;
+                }
+                for child in children {
+                    if self.delete_node(child, id) { return true; }
+                }
+            }
+            MetaNode::Block { statements, .. } => {
+                if let Some(pos) = statements.iter().position(|c| c.id() == id) {
+                    statements.remove(pos);
+                    return true;
+                }
+                for stmt in statements {
+                    if self.delete_node(stmt, id) { return true; }
+                }
+            }
+            MetaNode::Class { members, .. } => {
+                if let Some(pos) = members.iter().position(|c| c.id() == id) {
+                    members.remove(pos);
+                    return true;
+                }
+                for member in members {
+                    if self.delete_node(member, id) { return true; }
+                }
+            }
+            _ => {}
+        }
+        false
+    }
+
+    fn take_node(&self, parent: &mut MetaNode, id: Uuid) -> Option<MetaNode> {
+        match parent {
+            MetaNode::Module { children, .. } => {
+                if let Some(pos) = children.iter().position(|c| c.id() == id) {
+                    return Some(children.remove(pos));
+                }
+                for child in children {
+                    if let Some(found) = self.take_node(child, id) { return Some(found); }
+                }
+            }
+            MetaNode::Block { statements, .. } => {
+                if let Some(pos) = statements.iter().position(|c| c.id() == id) {
+                    return Some(statements.remove(pos));
+                }
+                for stmt in statements {
+                    if let Some(found) = self.take_node(stmt, id) { return Some(found); }
+                }
+            }
+            MetaNode::Class { members, .. } => {
+                if let Some(pos) = members.iter().position(|c| c.id() == id) {
+                    return Some(members.remove(pos));
+                }
+                for member in members {
+                    if let Some(found) = self.take_node(member, id) { return Some(found); }
+                }
+            }
+            _ => {}
+        }
+        None
     }
 }
 
@@ -259,244 +217,83 @@ impl Default for MergeEngine {
 mod tests {
     use super::*;
     use uuid::Uuid;
-
-    fn create_test_change(author: &str, parents: Vec<ChangeId>, operation: Operation) -> Change {
-        Change::new(author.to_string(), operation, parents)
-    }
+    use crate::common::change::version::VectorClock;
 
     #[test]
-    fn test_merge_empty_lists() {
-        let mut engine = MergeEngine::new();
-        let result = engine.merge(&[], &[]);
+    fn test_merge_insert_update() {
+        let engine = MergeEngine::new();
+        let user_id = Uuid::new_v4();
+        let root = MetaNode::module("root");
+        let root_id = root.id();
 
-        assert!(matches!(result, MergeResult::Success { changes } if changes.is_empty()));
-    }
+        // 1. Insert a node
+        let node = MetaNode::identifier("var_a");
+        let node_id = node.id();
+        let mut v1 = VectorClock::new();
+        v1.increment(user_id);
+        let c1 = Change::new(user_id, vec![Operation::insert(Some(root_id), 0, node)], v1.clone(), vec![]);
 
-    #[test]
-    fn test_merge_no_conflict() {
-        let mut engine = MergeEngine::new();
+        // 2. Update the node
+        let mut v2 = v1.clone();
+        v2.increment(user_id);
+        let updated_node = MetaNode::identifier("var_b");
+        // Ensure the ID stays the same for update
+        let updated_node = match updated_node {
+            MetaNode::Identifier { name, scope_id, .. } => MetaNode::Identifier { id: node_id, name, scope_id },
+            other => other,
+        };
+        let c2 = Change::new(user_id, vec![Operation::update(node_id, updated_node)], v2.clone(), vec![c1.id]);
 
-        let change1 = create_test_change(
-            "agent1",
-            vec![],
-            Operation::Insert {
-                position: 0,
-                content: "hello".to_string(),
-            },
-        );
-        let change2 = create_test_change(
-            "agent2",
-            vec![],
-            Operation::Insert {
-                position: 5,
-                content: " world".to_string(),
-            },
-        );
-
-        let result = engine.merge(&[change1.clone()], &[change2.clone()]);
-
-        assert!(matches!(result, MergeResult::Success { .. }));
-        if let MergeResult::Success { changes } = result {
-            assert_eq!(changes.len(), 2);
+        let result = engine.merge(root, &[c1, c2]).unwrap();
+        
+        if let MetaNode::Module { children, .. } = result {
+            assert_eq!(children.len(), 1);
+            if let MetaNode::Identifier { name, .. } = &children[0] {
+                assert_eq!(name, "var_b");
+            } else {
+                panic!("Expected Identifier");
+            }
         }
     }
 
     #[test]
-    fn test_merge_with_conflict() {
-        let mut engine = MergeEngine::new();
-
-        let change1 = create_test_change(
-            "agent1",
-            vec![],
-            Operation::Insert {
-                position: 0,
-                content: "hello".to_string(),
-            },
-        );
-        let change2 = create_test_change(
-            "agent2",
-            vec![],
-            Operation::Insert {
-                position: 0,
-                content: "world".to_string(),
-            },
-        );
-
-        let result = engine.merge(&[change1], &[change2]);
-
-        // Same position inserts should be reported as conflict
-        assert!(matches!(result, MergeResult::ConflictResolved { .. }));
-    }
-
-    #[test]
-    fn test_find_common_ancestor() {
+    fn test_merge_concurrent_conflicts() {
         let engine = MergeEngine::new();
+        let user_a = Uuid::new_v4();
+        let user_b = Uuid::new_v4();
+        let root = MetaNode::module("root");
+        let root_id = root.id();
 
-        let root = create_test_change(
-            "agent1",
-            vec![],
-            Operation::Insert {
-                position: 0,
-                content: "root".to_string(),
-            },
-        );
+        // User A and User B both insert a node concurrently
+        let node_a = MetaNode::identifier("node_a");
+        let mut v_a = VectorClock::new();
+        v_a.increment(user_a);
+        let c_a = Change::new(user_a, vec![Operation::insert(Some(root_id), 0, node_a)], v_a, vec![]);
 
-        let branch1 = create_test_change(
-            "agent2",
-            vec![root.id],
-            Operation::Insert {
-                position: 4,
-                content: "1".to_string(),
-            },
-        );
+        let node_b = MetaNode::identifier("node_b");
+        let mut v_b = VectorClock::new();
+        v_b.increment(user_b);
+        // User B's change has a later timestamp
+        let mut c_b = Change::new(user_b, vec![Operation::insert(Some(root_id), 0, node_b)], v_b, vec![]);
+        c_b.timestamp = c_a.timestamp + chrono::Duration::seconds(1);
 
-        let branch2 = create_test_change(
-            "agent3",
-            vec![root.id],
-            Operation::Insert {
-                position: 4,
-                content: "2".to_string(),
-            },
-        );
+        // Merge should be deterministic regardless of input order
+        let result1 = engine.merge(root.clone(), &[c_a.clone(), c_b.clone()]).unwrap();
+        let result2 = engine.merge(root.clone(), &[c_b.clone(), c_a.clone()]).unwrap();
 
-        let mut all_changes = HashMap::new();
-        all_changes.insert(root.id, root.clone());
-        all_changes.insert(branch1.id, branch1.clone());
-        all_changes.insert(branch2.id, branch2.clone());
-
-        let ancestor = engine.find_common_ancestor(&branch1, &branch2, &all_changes);
-
-        // The common ancestor should be the root
-        assert_eq!(ancestor, Some(root.id));
-    }
-
-    #[test]
-    fn test_create_merge_change() {
-        let engine = MergeEngine::new();
-
-        let left_head = Uuid::new_v4();
-        let right_head = Uuid::new_v4();
-        let merged_changes = vec![left_head, right_head];
-
-        let merge_change = engine.create_merge_change(
-            "merger".to_string(),
-            left_head,
-            right_head,
-            merged_changes.clone(),
-        );
-
-        assert_eq!(merge_change.author, "merger");
-        assert_eq!(merge_change.parents, vec![left_head, right_head]);
-
-        if let Operation::Custom {
-            operation_type,
-            data,
-        } = merge_change.operation
-        {
-            assert_eq!(operation_type, "merge");
-            assert!(data.contains_key("left_head"));
-            assert!(data.contains_key("right_head"));
-        } else {
-            panic!("Expected Custom operation");
+        assert_eq!(result1, result2);
+        
+        if let MetaNode::Module { children, .. } = result1 {
+            assert_eq!(children.len(), 2);
+            // According to LWW and our sort, c_b (later timestamp) should be applied after c_a
+            // 1. c_a inserts node_a at index 0 -> [node_a]
+            // 2. c_b inserts node_b at index 0 -> [node_b, node_a]
+            if let MetaNode::Identifier { name, .. } = &children[0] {
+                assert_eq!(name, "node_b");
+            }
+            if let MetaNode::Identifier { name, .. } = &children[1] {
+                assert_eq!(name, "node_a");
+            }
         }
-    }
-
-    #[test]
-    fn test_delete_conflict_detection() {
-        let engine = MergeEngine::new();
-
-        let change1 = create_test_change(
-            "agent1",
-            vec![],
-            Operation::Delete {
-                position: 0,
-                length: 5,
-            },
-        );
-        let change2 = create_test_change(
-            "agent2",
-            vec![],
-            Operation::Delete {
-                position: 3,
-                length: 5,
-            },
-        );
-
-        assert!(engine.has_operation_conflict(&change1, &change2));
-    }
-
-    #[test]
-    fn test_update_conflict_detection() {
-        let engine = MergeEngine::new();
-
-        let change1 = create_test_change(
-            "agent1",
-            vec![],
-            Operation::Update {
-                path: "key".to_string(),
-                value: serde_json::json!("value1"),
-            },
-        );
-        let change2 = create_test_change(
-            "agent2",
-            vec![],
-            Operation::Update {
-                path: "key".to_string(),
-                value: serde_json::json!("value2"),
-            },
-        );
-
-        assert!(engine.has_operation_conflict(&change1, &change2));
-    }
-
-    #[test]
-    fn test_topological_sort() {
-        let engine = MergeEngine::new();
-
-        let root = create_test_change(
-            "agent1",
-            vec![],
-            Operation::Insert {
-                position: 0,
-                content: "a".to_string(),
-            },
-        );
-        let child1 = create_test_change(
-            "agent2",
-            vec![root.id],
-            Operation::Insert {
-                position: 1,
-                content: "b".to_string(),
-            },
-        );
-        let child2 = create_test_change(
-            "agent3",
-            vec![child1.id],
-            Operation::Insert {
-                position: 2,
-                content: "c".to_string(),
-            },
-        );
-
-        let mut left_index = HashMap::new();
-        left_index.insert(root.id, &root);
-        left_index.insert(child1.id, &child1);
-        left_index.insert(child2.id, &child2);
-
-        let all_ids = vec![root.id, child1.id, child2.id].into_iter().collect();
-
-        let sorted = engine.topological_sort(&left_index, &HashMap::new(), &all_ids);
-
-        // Check that all changes are included
-        assert_eq!(sorted.len(), 3);
-
-        // Root should come before children
-        let root_pos = sorted.iter().position(|&id| id == root.id).unwrap();
-        let child1_pos = sorted.iter().position(|&id| id == child1.id).unwrap();
-        let child2_pos = sorted.iter().position(|&id| id == child2.id).unwrap();
-
-        assert!(root_pos < child1_pos, "root should come before child1");
-        assert!(child1_pos < child2_pos, "child1 should come before child2");
     }
 }
-

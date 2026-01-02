@@ -1,46 +1,56 @@
-//! # Operation types
-//!
-//! Defines the types of operations that can be performed in a change.
-
+use crate::common::meta::ast::MetaNode;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use uuid::Uuid;
 
-/// Represents the type of operation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// 操作类型定义
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum Operation {
-    /// Insert text at a position
-    Insert { position: usize, content: String },
-    /// Delete text at a position
-    Delete { position: usize, length: usize },
-    /// Update a field value
-    Update {
-        path: String,
-        value: serde_json::Value,
+    /// 插入节点
+    Insert {
+        parent_id: Option<Uuid>,
+        index: usize,
+        node: MetaNode,
     },
-    /// Create a new file/node
-    Create { path: String, content: String },
-    /// Remove a file/node
-    Remove { path: String },
-    /// Move/rename a file/node
-    Move { from: String, to: String },
-    /// Custom operation with arbitrary data
-    Custom {
-        operation_type: String,
-        data: HashMap<String, serde_json::Value>,
+    /// 更新节点
+    Update { node_id: Uuid, new_node: MetaNode },
+    /// 删除节点
+    Delete { node_id: Uuid },
+    /// 移动节点
+    Move {
+        node_id: Uuid,
+        new_parent_id: Option<Uuid>,
+        new_index: usize,
     },
+    /// 自定义 Mock 操作
+    Mock { kind: String, data: String },
 }
 
 impl Operation {
-    /// Returns the operation type name for serialization/metadata
-    pub fn type_name(&self) -> &str {
-        match self {
-            Operation::Insert { .. } => "insert",
-            Operation::Delete { .. } => "delete",
-            Operation::Update { .. } => "update",
-            Operation::Create { .. } => "create",
-            Operation::Remove { .. } => "remove",
-            Operation::Move { .. } => "move",
-            Operation::Custom { operation_type, .. } => operation_type,
+    /// 创建插入操作
+    pub fn insert(parent_id: Option<Uuid>, index: usize, node: MetaNode) -> Self {
+        Operation::Insert { parent_id, index, node }
+    }
+
+    /// 创建更新操作
+    pub fn update(node_id: Uuid, new_node: MetaNode) -> Self {
+        Operation::Update { node_id, new_node }
+    }
+
+    /// 创建删除操作
+    pub fn delete(node_id: Uuid) -> Self {
+        Operation::Delete { node_id }
+    }
+
+    /// 创建移动操作
+    pub fn r#move(node_id: Uuid, new_parent_id: Option<Uuid>, new_index: usize) -> Self {
+        Operation::Move { node_id, new_parent_id, new_index }
+    }
+
+    pub fn mock(kind: &str, data: &str) -> Self {
+        Operation::Mock {
+            kind: kind.to_string(),
+            data: data.to_string(),
         }
     }
 }
@@ -50,84 +60,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_operation_type_name() {
-        assert_eq!(
-            Operation::Insert {
-                position: 0,
-                content: "hello".to_string()
-            }
-            .type_name(),
-            "insert"
-        );
-        assert_eq!(
-            Operation::Delete {
-                position: 0,
-                length: 5
-            }
-            .type_name(),
-            "delete"
-        );
-        assert_eq!(
-            Operation::Update {
-                path: "key".to_string(),
-                value: serde_json::json!("value")
-            }
-            .type_name(),
-            "update"
-        );
-        assert_eq!(
-            Operation::Create {
-                path: "file.txt".to_string(),
-                content: "content".to_string()
-            }
-            .type_name(),
-            "create"
-        );
-        assert_eq!(
-            Operation::Remove {
-                path: "file.txt".to_string()
-            }
-            .type_name(),
-            "remove"
-        );
-        assert_eq!(
-            Operation::Move {
-                from: "old.txt".to_string(),
-                to: "new.txt".to_string()
-            }
-            .type_name(),
-            "move"
-        );
-        assert_eq!(
-            Operation::Custom {
-                operation_type: "custom_op".to_string(),
-                data: HashMap::new()
-            }
-            .type_name(),
-            "custom_op"
-        );
-    }
-
-    #[test]
-    fn test_operation_serialization() {
-        let op = Operation::Insert {
-            position: 5,
-            content: "test".to_string(),
-        };
-        let serialized = serde_json::to_string(&op).unwrap();
-        let deserialized: Operation = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(op, deserialized);
-    }
-
-    #[test]
-    fn test_custom_operation() {
-        let mut data = HashMap::new();
-        data.insert("key".to_string(), serde_json::json!("value"));
-        let op = Operation::Custom {
-            operation_type: "my_custom".to_string(),
-            data,
-        };
-        assert_eq!(op.type_name(), "my_custom");
+    fn test_operation_mock() {
+        let op = Operation::mock("test", "data");
+        if let Operation::Mock { kind, data } = op {
+            assert_eq!(kind, "test");
+            assert_eq!(data, "data");
+        } else {
+            panic!("Expected Mock operation");
+        }
     }
 }
-
