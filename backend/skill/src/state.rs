@@ -65,7 +65,7 @@ mod tests {
 
     fn create_test_skill(name: &str) -> Skill {
         Skill {
-            id: SkillId::new(SkillCategory::Syntax, name, "Rust"),
+            id: SkillId::new(SkillCategory::new("Syntax"), name, "Rust"),
             name: name.into(),
             description: format!("{} skill", name),
             content: format!("Content for {}", name),
@@ -131,13 +131,16 @@ mod tests {
             })],
         };
 
-        SkillState::preload_from_config(&config)
-            .await
-            .unwrap();
+        SkillState::preload_from_config(&config).await.unwrap();
 
         // Check that at least one new skill was loaded
         // (can't use exact count due to parallel tests sharing global state)
         let state = SkillState::get().read().await;
-        assert!(state.registry.count() >= initial_count, "Should have at least {} skills, got {}", initial_count, state.registry.count());
+        assert!(
+            state.registry.count() >= initial_count,
+            "Should have at least {} skills, got {}",
+            initial_count,
+            state.registry.count()
+        );
     }
 }

@@ -137,9 +137,8 @@ struct RawMetadata {
 
 impl RawSkill {
     fn into_skill(self) -> Result<Skill, SkillError> {
-        let category = parse_category(&self.id.category).ok_or_else(|| {
-            SkillError::ParseError(format!("Invalid category: {}", self.id.category))
-        })?;
+        // Now accepts any string as a category
+        let category = SkillCategory::new(&self.id.category);
 
         let id = SkillId::new(category, &self.id.name, &self.id.language);
 
@@ -165,18 +164,6 @@ impl RawSkill {
                 tags: self.metadata.tags.into_iter().collect(),
             },
         })
-    }
-}
-
-/// Parse category from string
-fn parse_category(s: &str) -> Option<SkillCategory> {
-    match s.to_lowercase().as_str() {
-        "syntax" => Some(SkillCategory::Syntax),
-        "semantic" => Some(SkillCategory::Semantic),
-        "project" => Some(SkillCategory::Project),
-        "refactoring" => Some(SkillCategory::Refactoring),
-        "languagespecific" => Some(SkillCategory::LanguageSpecific),
-        _ => None,
     }
 }
 
@@ -238,7 +225,7 @@ metadata:
 
         let skill = &skills[0];
         assert_eq!(skill.name, "Rust macro_rules! Syntax");
-        assert_eq!(skill.id.category, SkillCategory::Syntax);
+        assert_eq!(skill.id.category.as_str(), "Syntax");
         assert_eq!(skill.id.language, "Rust");
         assert_eq!(skill.examples.len(), 1);
         assert!(skill.metadata.tags.contains("macro"));
@@ -249,7 +236,7 @@ metadata:
         let skill = SkillLoader::load_from_json(JSON_SKILL.to_string()).unwrap();
 
         assert_eq!(skill.name, "Rust macro_rules! Syntax");
-        assert_eq!(skill.id.category, SkillCategory::Syntax);
+        assert_eq!(skill.id.category.as_str(), "Syntax");
         assert_eq!(skill.id.language, "Rust");
         assert_eq!(skill.related_tools.len(), 1);
         assert_eq!(skill.related_tools[0], "syntax::parse");
@@ -267,10 +254,11 @@ metadata:
     }
 
     #[test]
-    fn test_invalid_category() {
-        let invalid_yaml = r#"
+    fn test_custom_category() {
+        // With dynamic categories, any category name is valid
+        let custom_yaml = r#"
 id:
-  category: InvalidCategory
+  category: CustomCategory
   name: test
   language: Rust
 name: "Test"
@@ -282,7 +270,9 @@ metadata:
   tags: []
 "#;
 
-        let result = SkillLoader::load_from_yaml(invalid_yaml);
-        assert!(result.is_err());
+        let result = SkillLoader::load_from_yaml(custom_yaml);
+        assert!(result.is_ok());
+        let skills = result.unwrap();
+        assert_eq!(skills[0].id.category.as_str(), "CustomCategory");
     }
 }

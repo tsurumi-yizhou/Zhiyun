@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::fmt;
 
 /// Skill identifier uniquely identifying a skill
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -23,20 +24,70 @@ impl SkillId {
     }
 }
 
-/// Category of the skill
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum SkillCategory {
-    /// Syntax-related skills (parsing, AST, patterns)
-    Syntax,
-    /// Semantic understanding (type checking, liveness, reachability)
-    Semantic,
-    /// Project-specific knowledge (architecture, conventions)
-    Project,
-    /// Refactoring patterns and transformations
-    Refactoring,
-    /// Language-specific idioms and best practices
-    LanguageSpecific,
+/// Category of the skill (dynamic string-based)
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SkillCategory(#[serde(deserialize_with = "deserialize_category")] pub String);
+
+impl SkillCategory {
+    /// Create a new category
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    /// Get the category name
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Common predefined categories (for backward compatibility)
+    pub const SYNTAX: &'static str = "Syntax";
+    pub const SEMANTIC: &'static str = "Semantic";
+    pub const PROJECT: &'static str = "Project";
+    pub const REFACTORING: &'static str = "Refactoring";
+    pub const LANGUAGE_SPECIFIC: &'static str = "LanguageSpecific";
+}
+
+impl fmt::Display for SkillCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<&str> for SkillCategory {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl From<String> for SkillCategory {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl AsRef<str> for SkillCategory {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Custom deserializer to normalize category names
+fn deserialize_category<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    // Normalize: capitalize first letter, handle snake_case
+    Ok(s.split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        })
+        .collect())
 }
 
 /// A skill definition with structured knowledge
@@ -107,18 +158,31 @@ mod tests {
 
     #[test]
     fn test_skill_id_unique() {
-        let id1 = SkillId::new(SkillCategory::Syntax, "macro_rules", "Rust");
-        let id2 = SkillId::new(SkillCategory::Syntax, "macro_rules", "Rust");
-        let id3 = SkillId::new(SkillCategory::Semantic, "macro_rules", "Rust");
+        let id1 = SkillId::new(SkillCategory::new("Syntax"), "macro_rules", "Rust");
+        let id2 = SkillId::new(SkillCategory::new("Syntax"), "macro_rules", "Rust");
+        let id3 = SkillId::new(SkillCategory::new("Semantic"), "macro_rules", "Rust");
 
         assert_eq!(id1, id2);
         assert_ne!(id1, id3);
     }
 
     #[test]
+    fn test_skill_category_newtype() {
+        let cat1 = SkillCategory::new("CustomCategory");
+        let cat2 = SkillCategory::from("another_category");
+        let cat3: SkillCategory = "ThirdCategory".into();
+
+        assert_eq!(cat1.as_str(), "CustomCategory");
+        // Note: normalization only happens during deserialization,
+        // not through From/Into trait implementations
+        assert_eq!(cat2.as_str(), "another_category");
+        assert_eq!(cat3.as_str(), "ThirdCategory");
+    }
+
+    #[test]
     fn test_skill_validation_success() {
         let skill = Skill {
-            id: SkillId::new(SkillCategory::Syntax, "test", "Rust"),
+            id: SkillId::new(SkillCategory::new("Syntax"), "test", "Rust"),
             name: "Test Skill".into(),
             description: "A test skill".into(),
             content: "Some content".into(),
@@ -138,7 +202,7 @@ mod tests {
     #[test]
     fn test_skill_validation_empty_name() {
         let skill = Skill {
-            id: SkillId::new(SkillCategory::Syntax, "test", "Rust"),
+            id: SkillId::new(SkillCategory::new("Syntax"), "test", "Rust"),
             name: "".into(),
             description: "A test skill".into(),
             content: "Some content".into(),
@@ -153,5 +217,17 @@ mod tests {
         };
 
         assert!(skill.validate().is_err());
+    }
+
+    #[test]
+    fn test_category_from_str() {
+        let cat: SkillCategory = "TestCategory".into();
+        assert_eq!(cat.as_str(), "TestCategory");
+    }
+
+    #[test]
+    fn test_category_display() {
+        let cat = SkillCategory::new("MyCategory");
+        assert_eq!(cat.to_string(), "MyCategory");
     }
 }

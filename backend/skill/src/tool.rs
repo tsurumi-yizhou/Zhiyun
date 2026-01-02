@@ -3,8 +3,8 @@ use crate::state::SkillState;
 use crate::types::SkillCategory;
 use crate::{SkillError, SkillId};
 use async_trait::async_trait;
-use serde_json::json;
 use serde_json::Value;
+use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -71,7 +71,7 @@ impl Tool for RegisterSkillTool {
             content: format!("Skill '{}' registered successfully", skill.name),
             data: Some(json!({
                 "id": {
-                    "category": format!("{:?}", skill.id.category),
+                    "category": skill.id.category.as_str(),
                     "name": skill.id.name,
                     "language": skill.id.language
                 },
@@ -136,7 +136,7 @@ impl Tool for SearchSkillsTool {
                 json!({
                     "name": s.name,
                     "description": s.description,
-                    "category": format!("{:?}", s.id.category),
+                    "category": s.id.category.as_str(),
                     "language": s.id.language,
                     "tags": s.metadata.tags,
                     "related_tools": s.related_tools
@@ -229,8 +229,7 @@ impl Tool for GetSkillTool {
             "properties": {
                 "category": {
                     "type": "string",
-                    "enum": ["Syntax", "Semantic", "Project", "Refactoring", "LanguageSpecific"],
-                    "description": "Skill category"
+                    "description": "Skill category (e.g., Syntax, Semantic, Project, etc.)"
                 },
                 "name": {
                     "type": "string",
@@ -256,9 +255,7 @@ impl Tool for GetSkillTool {
             .as_str()
             .ok_or_else(|| SkillError::InvalidSkill("language is required".into()))?;
 
-        let category = parse_category(category_str).ok_or_else(|| {
-            SkillError::ParseError(format!("Invalid category: {}", category_str))
-        })?;
+        let category = SkillCategory::new(category_str);
 
         let id = SkillId::new(category, name, language);
         let state = SkillState::get().read().await;
@@ -271,7 +268,7 @@ impl Tool for GetSkillTool {
             content: format!("Found skill: {}", skill.name),
             data: Some(json!({
                 "id": {
-                    "category": format!("{:?}", skill.id.category),
+                    "category": skill.id.category.as_str(),
                     "name": skill.id.name,
                     "language": skill.id.language
                 },
@@ -313,7 +310,6 @@ impl Tool for ListSkillsTool {
             "properties": {
                 "category": {
                     "type": "string",
-                    "enum": ["Syntax", "Semantic", "Project", "Refactoring", "LanguageSpecific"],
                     "description": "Filter by category (optional)"
                 },
                 "language": {
@@ -328,9 +324,7 @@ impl Tool for ListSkillsTool {
         let state = SkillState::get().read().await;
 
         let skills = if let Some(cat_str) = args["category"].as_str() {
-            let category = parse_category(cat_str).ok_or_else(|| {
-                SkillError::ParseError(format!("Invalid category: {}", cat_str))
-            })?;
+            let category = SkillCategory::new(cat_str);
             state.registry.by_category(category)
         } else if let Some(lang) = args["language"].as_str() {
             state.registry.by_language(lang)
@@ -344,7 +338,7 @@ impl Tool for ListSkillsTool {
                 json!({
                     "name": s.name,
                     "description": s.description,
-                    "category": format!("{:?}", s.id.category),
+                    "category": s.id.category.as_str(),
                     "language": s.id.language
                 })
             })
@@ -370,7 +364,10 @@ impl SkillToolRegistry {
     /// Create a new tool registry with all skill tools registered
     pub fn new() -> Self {
         let mut tools = HashMap::new();
-        tools.insert("register_skill", Arc::new(RegisterSkillTool) as Arc<dyn Tool>);
+        tools.insert(
+            "register_skill",
+            Arc::new(RegisterSkillTool) as Arc<dyn Tool>,
+        );
         tools.insert("search_skills", Arc::new(SearchSkillsTool) as Arc<dyn Tool>);
         tools.insert("inject_skills", Arc::new(InjectSkillsTool) as Arc<dyn Tool>);
         tools.insert("get_skill", Arc::new(GetSkillTool) as Arc<dyn Tool>);
@@ -418,22 +415,6 @@ impl Default for SkillToolRegistry {
 }
 
 // ============================================================================
-// Helper Functions
-// ============================================================================
-
-/// Parse category from string (copied from loader.rs)
-fn parse_category(s: &str) -> Option<SkillCategory> {
-    match s.to_lowercase().as_str() {
-        "syntax" => Some(SkillCategory::Syntax),
-        "semantic" => Some(SkillCategory::Semantic),
-        "project" => Some(SkillCategory::Project),
-        "refactoring" => Some(SkillCategory::Refactoring),
-        "languagespecific" => Some(SkillCategory::LanguageSpecific),
-        _ => None,
-    }
-}
-
-// ============================================================================
 // Tests
 // ============================================================================
 
@@ -445,7 +426,7 @@ mod tests {
 
     fn create_test_skill(name: &str) -> crate::Skill {
         crate::Skill {
-            id: SkillId::new(SkillCategory::Syntax, name, "Rust"),
+            id: SkillId::new(SkillCategory::new("Syntax"), name, "Rust"),
             name: name.into(),
             description: format!("{} skill", name),
             content: format!("Content for {}", name),
@@ -492,17 +473,19 @@ mod tests {
             }
         });
 
-        let result = tool
-            .execute(json!({ "skill": skill_json }))
-            .await
-            .unwrap();
+        let result = tool.execute(json!({ "skill": skill_json })).await.unwrap();
 
         assert!(result.content.contains("registered successfully"));
 
         // Check that at least one new skill was registered
         // (can't use exact count due to parallel tests sharing global state)
         let state = SkillState::get().read().await;
-        assert!(state.registry.count() >= initial_count, "Should have at least {} skills, got {}", initial_count, state.registry.count());
+        assert!(
+            state.registry.count() >= initial_count,
+            "Should have at least {} skills, got {}",
+            initial_count,
+            state.registry.count()
+        );
     }
 
     #[tokio::test]
@@ -510,7 +493,10 @@ mod tests {
         // Register a skill with a unique name for this test
         let unique_name = "search_test_unique_parse_rust";
         let mut state = SkillState::get().write().await;
-        state.registry.register(create_test_skill(unique_name)).unwrap();
+        state
+            .registry
+            .register(create_test_skill(unique_name))
+            .unwrap();
         drop(state);
 
         let tool = SearchSkillsTool;
@@ -528,9 +514,7 @@ mod tests {
             let skills: Vec<Value> = serde_json::from_value(data).unwrap();
             assert!(!skills.is_empty());
             // Check that our registered skill is in the results
-            let found = skills
-                .iter()
-                .any(|s| s["name"] == unique_name);
+            let found = skills.iter().any(|s| s["name"] == unique_name);
             assert!(found, "Should find the registered skill");
         }
     }

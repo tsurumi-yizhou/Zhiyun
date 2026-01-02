@@ -1,12 +1,12 @@
 // Model Registry - manages providers, models, and API calls
+use futures::stream::Stream;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use futures::stream::Stream;
 
 use crate::error::EndpointError;
-use crate::traits::*;
 use crate::stream::*;
+use crate::traits::*;
 
 // ============================================================================
 // FileManager - Manages file state across providers
@@ -35,7 +35,8 @@ impl FileManager {
     /// Returns None if file needs to be uploaded
     pub async fn get_provider_file_id(&self, local_id: &str, provider_id: &str) -> Option<String> {
         let files = self.files.read().await;
-        files.get(local_id)
+        files
+            .get(local_id)
             .and_then(|state| state.provider_files.get(provider_id))
             .map(|state| state.file_id.clone())
     }
@@ -79,6 +80,7 @@ pub struct ModelRegistry {
     providers: RwLock<HashMap<String, ProviderInfo>>,
     provider_configs: RwLock<HashMap<String, ProviderConfig>>,
     file_manager: Arc<FileManager>,
+    routing_model: RwLock<Option<Endpoint>>,
 }
 
 impl ModelRegistry {
@@ -88,7 +90,24 @@ impl ModelRegistry {
             providers: RwLock::new(HashMap::new()),
             provider_configs: RwLock::new(HashMap::new()),
             file_manager: Arc::new(FileManager::new()),
+            routing_model: RwLock::new(None),
         }
+    }
+
+    /// Create a new model registry with a routing model
+    pub fn with_routing(provider_id: &str, model_id: &str) -> Self {
+        Self {
+            providers: RwLock::new(HashMap::new()),
+            provider_configs: RwLock::new(HashMap::new()),
+            file_manager: Arc::new(FileManager::new()),
+            routing_model: RwLock::new(Some(Endpoint::new(provider_id, model_id))),
+        }
+    }
+
+    /// Set or update the routing model
+    pub async fn set_routing_model(&self, provider_id: &str, model_id: &str) {
+        let mut routing = self.routing_model.write().await;
+        *routing = Some(Endpoint::new(provider_id, model_id));
     }
 
     /// Add provider configuration
@@ -100,7 +119,8 @@ impl ModelRegistry {
     /// Get model info
     pub async fn get_model(&self, provider_id: &str, model_id: &str) -> Option<ModelInfo> {
         let providers = self.providers.read().await;
-        providers.get(provider_id)
+        providers
+            .get(provider_id)
             .and_then(|p| p.models.get(model_id))
             .cloned()
     }
@@ -145,7 +165,10 @@ impl ModelRegistry {
     }
 
     /// Get or create provider config
-    pub async fn get_provider_config(&self, provider_id: &str) -> Result<ProviderConfig, EndpointError> {
+    pub async fn get_provider_config(
+        &self,
+        provider_id: &str,
+    ) -> Result<ProviderConfig, EndpointError> {
         let configs = self.provider_configs.read().await;
         configs
             .get(provider_id)
@@ -157,24 +180,314 @@ impl ModelRegistry {
     pub async fn chat_completion(
         &self,
         endpoint: &Endpoint,
-        _messages: Vec<ChatMessage>,
-        _options: Option<ChatOptions>,
+        messages: Vec<ChatMessage>,
+        options: Option<ChatOptions>,
     ) -> Result<ChatResponse, EndpointError> {
         // Get provider config
         let config = self.get_provider_config(&endpoint.provider_id).await?;
 
         // Create async-openai client
-        let _client = if let Some(base_url) = &config.base_url {
-            async_openai::config::OpenAIConfig::new()
-                .with_api_key(&config.api_key)
-                .with_api_base(base_url)
+        let client = if let Some(base_url) = &config.base_url {
+            async_openai::Client::with_config(
+                async_openai::config::OpenAIConfig::new()
+                    .with_api_key(&config.api_key)
+                    .with_api_base(base_url),
+            )
         } else {
-            async_openai::config::OpenAIConfig::new().with_api_key(&config.api_key)
+            async_openai::Client::with_config(
+                async_openai::config::OpenAIConfig::new().with_api_key(&config.api_key),
+            )
         };
 
-        // TODO: Implement actual API call
-        // This is a placeholder - need to convert to async-openai types
-        Err(EndpointError::ApiError("Not yet implemented".to_string()))
+        // Convert our ChatMessage types to async-openai types
+        let openai_messages: Vec<async_openai::types::ChatCompletionRequestMessage> = messages
+            .into_iter()
+            .map(|msg| {
+                let role = match msg.role {
+                    MessageRole::System => async_openai::types::Role::System,
+                    MessageRole::User => async_openai::types::Role::User,
+                    MessageRole::Assistant => async_openai::types::Role::Assistant,
+                    MessageRole::Tool => async_openai::types::Role::Tool,
+                };
+
+                // For async-openai 0.26, create appropriate message based on role
+                match role {
+                    async_openai::types::Role::System => {
+                        let content = match msg.content {
+                            MessageContent::Text(text) => {
+                                async_openai::types::ChatCompletionRequestSystemMessageContent::Text(
+                                    text,
+                                )
+                            }
+                            _ => async_openai::types::ChatCompletionRequestSystemMessageContent::Text(
+                                String::new(),
+                            ),
+                        };
+                        async_openai::types::ChatCompletionRequestMessage::System(
+                            async_openai::types::ChatCompletionRequestSystemMessage {
+                                content,
+                                ..Default::default()
+                            },
+                        )
+                    }
+                    async_openai::types::Role::User => {
+                        let content = match msg.content {
+                            MessageContent::Text(text) => {
+                                async_openai::types::ChatCompletionRequestUserMessageContent::Text(
+                                    text,
+                                )
+                            }
+                            _ => async_openai::types::ChatCompletionRequestUserMessageContent::Text(
+                                String::new(),
+                            ),
+                        };
+                        async_openai::types::ChatCompletionRequestMessage::User(
+                            async_openai::types::ChatCompletionRequestUserMessage {
+                                content,
+                                ..Default::default()
+                            },
+                        )
+                    }
+                    async_openai::types::Role::Assistant => {
+                        async_openai::types::ChatCompletionRequestMessage::Assistant(
+                            async_openai::types::ChatCompletionRequestAssistantMessage {
+                                content: Some(match msg.content {
+                                    MessageContent::Text(text) => {
+                                        async_openai::types::
+                                            ChatCompletionRequestAssistantMessageContent::Text(
+                                                text,
+                                            )
+                                    }
+                                    _ => {
+                                        async_openai::types::
+                                            ChatCompletionRequestAssistantMessageContent::Text(
+                                                String::new(),
+                                            )
+                                    }
+                                }),
+                                tool_calls: msg.tool_calls.map(|calls| {
+                                    calls
+                                        .into_iter()
+                                        .map(|call| {
+                                            async_openai::types::ChatCompletionMessageToolCall {
+                                                id: call.id,
+                                                r#type: async_openai::types::ChatCompletionToolType::Function,
+                                                function: async_openai::types::FunctionCall {
+                                                    name: call.function.name,
+                                                    arguments: call.function.arguments,
+                                                },
+                                            }
+                                        })
+                                        .collect()
+                                }),
+                                ..Default::default()
+                            },
+                        )
+                    }
+                    async_openai::types::Role::Tool => {
+                        async_openai::types::ChatCompletionRequestMessage::Tool(
+                            async_openai::types::ChatCompletionRequestToolMessage {
+                                content: match msg.content {
+                                    MessageContent::Text(text) => {
+                                        async_openai::types::ChatCompletionRequestToolMessageContent::Text(text)
+                                    }
+                                    _ => async_openai::types::ChatCompletionRequestToolMessageContent::Text(
+                                        String::new(),
+                                    ),
+                                },
+                                ..Default::default()
+                            },
+                        )
+                    }
+                    async_openai::types::Role::Function => {
+                        // Function role is not typically used in request messages
+                        // Convert to Assistant with text content
+                        async_openai::types::ChatCompletionRequestMessage::Assistant(
+                            async_openai::types::ChatCompletionRequestAssistantMessage {
+                                content: Some(match msg.content {
+                                    MessageContent::Text(text) => {
+                                        async_openai::types::
+                                            ChatCompletionRequestAssistantMessageContent::Text(
+                                                text,
+                                            )
+                                    }
+                                    _ => {
+                                        async_openai::types::
+                                            ChatCompletionRequestAssistantMessageContent::Text(
+                                                String::new(),
+                                            )
+                                    }
+                                }),
+                                ..Default::default()
+                            },
+                        )
+                    }
+                }
+            })
+            .collect();
+
+        // Build request
+        let mut builder = async_openai::types::CreateChatCompletionRequestArgs::default();
+        let _ = builder.model(&endpoint.model_id).messages(openai_messages);
+
+        // Add options
+        if let Some(opts) = options {
+            if let Some(max_tokens) = opts.max_tokens {
+                let _ = builder.max_tokens(max_tokens);
+            }
+            if let Some(tools) = opts.tools {
+                let tools_vec: Vec<async_openai::types::ChatCompletionTool> = tools
+                    .into_iter()
+                    .map(|tool| async_openai::types::ChatCompletionTool {
+                        r#type: async_openai::types::ChatCompletionToolType::Function,
+                        function: async_openai::types::FunctionObject {
+                            name: tool.function.name,
+                            description: Some(tool.function.description),
+                            parameters: Some(tool.function.parameters),
+                            strict: None,
+                        },
+                    })
+                    .collect();
+                let _ = builder.tools(tools_vec);
+            }
+        }
+
+        let request = builder
+            .build()
+            .map_err(|e| EndpointError::InvalidRequest(format!("Invalid request: {}", e)))?;
+
+        // Call API
+        let response = client
+            .chat()
+            .create(request)
+            .await
+            .map_err(|e| EndpointError::ApiError(format!("API call failed: {}", e)))?;
+
+        // Convert response back to our types
+        let choices: Vec<Choice> = response
+            .choices
+            .into_iter()
+            .map(|choice| Choice {
+                index: choice.index as usize,
+                message: ChatMessage {
+                    role: match choice.message.role {
+                        async_openai::types::Role::System => MessageRole::System,
+                        async_openai::types::Role::User => MessageRole::User,
+                        async_openai::types::Role::Assistant => MessageRole::Assistant,
+                        async_openai::types::Role::Tool => MessageRole::Tool,
+                        async_openai::types::Role::Function => MessageRole::Tool, // Map Function to Tool
+                    },
+                    content: MessageContent::Text(choice.message.content.unwrap_or_default()),
+                    tool_calls: choice.message.tool_calls.map(|calls| {
+                        calls
+                            .into_iter()
+                            .map(|call| ToolCall {
+                                id: call.id,
+                                function: FunctionCall {
+                                    name: call.function.name,
+                                    arguments: call.function.arguments,
+                                },
+                            })
+                            .collect()
+                    }),
+                    tool_call_id: None,
+                },
+                finish_reason: choice.finish_reason.map(|r| format!("{:?}", r)),
+            })
+            .collect();
+
+        let usage = response.usage.map(|u| Usage {
+            prompt_tokens: u.prompt_tokens,
+            completion_tokens: u.completion_tokens,
+            total_tokens: u.total_tokens,
+            cache_read_tokens: None,
+        });
+
+        Ok(ChatResponse {
+            id: response.id,
+            model: response.model,
+            choices,
+            usage,
+        })
+    }
+
+    /// Route a prompt to the best models using the routing model
+    /// Returns a ModelRoutingResult with a primary model and fallback options
+    pub async fn route_models(&self, prompt: &str) -> Result<ModelRoutingResult, EndpointError> {
+        let routing_endpoint = self.routing_model.read().await;
+        let endpoint = routing_endpoint.as_ref().ok_or_else(|| {
+            EndpointError::InvalidRequest("Routing model not configured".to_string())
+        })?;
+
+        // Build routing prompt
+        let messages = vec![
+            ChatMessage {
+                role: MessageRole::System,
+                content: MessageContent::Text(
+                    "You are a model routing expert. Analyze the task and recommend the best models. \
+                     Always respond with valid JSON containing 'primary' and 'fallbacks' fields."
+                        .to_string(),
+                ),
+                tool_calls: None,
+                tool_call_id: None,
+            },
+            ChatMessage {
+                role: MessageRole::User,
+                content: MessageContent::Text(format!(
+                    "Task: {}\n\nRecommend the top 3 models for this task. \
+                     Return as JSON: {{\"primary\": \"model-id\", \"fallbacks\": [\"model-id-1\", \"model-id-2\"]}}",
+                    prompt
+                )),
+                tool_calls: None,
+                tool_call_id: None,
+            },
+        ];
+
+        let response = self.chat_completion(endpoint, messages, None).await?;
+
+        // Parse response to extract model IDs
+        if let Some(choice) = response.choices.first()
+            && let MessageContent::Text(content) = &choice.message.content
+        {
+            // Try to extract JSON from the response
+            let json_str = content
+                .trim()
+                .strip_prefix("```json")
+                .or_else(|| content.trim().strip_prefix("```"))
+                .unwrap_or(content.trim());
+            let json_str = json_str.strip_suffix("```").unwrap_or(json_str);
+
+            let result: serde_json::Value = serde_json::from_str(json_str).map_err(|_| {
+                EndpointError::ParseError(format!(
+                    "Invalid routing response: {}",
+                    content.chars().take(100).collect::<String>()
+                ))
+            })?;
+
+            let primary = result["primary"]
+                .as_str()
+                .ok_or_else(|| {
+                    EndpointError::ParseError(
+                        "Missing 'primary' field in routing response".to_string(),
+                    )
+                })?
+                .to_string();
+
+            let fallbacks = result["fallbacks"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            return Ok(ModelRoutingResult { primary, fallbacks });
+        }
+
+        Err(EndpointError::ApiError(
+            "Empty routing response".to_string(),
+        ))
     }
 
     /// Chat completion (streaming)
@@ -291,7 +604,8 @@ mod tests {
         };
 
         fm.add_file("local-1".to_string(), state).await;
-        fm.mark_uploaded("local-1", "anthropic", "file-xyz".to_string()).await;
+        fm.mark_uploaded("local-1", "anthropic", "file-xyz".to_string())
+            .await;
 
         let file_id = fm.get_provider_file_id("local-1", "anthropic").await;
         assert_eq!(file_id, Some("file-xyz".to_string()));
@@ -366,33 +680,39 @@ mod tests {
             let mut providers = registry.providers.write().await;
 
             let mut models = HashMap::new();
-            models.insert("gpt-4".to_string(), ModelInfo {
-                id: "gpt-4".to_string(),
-                name: "GPT-4".to_string(),
-                family: "gpt-4".to_string(),
-                reasoning: false,
-                tool_call: true,
-                attachment: true,
-                vision: true,
-                cost: ModelCost {
-                    input: 0.03,
-                    output: 0.06,
-                    cache_read: None,
+            models.insert(
+                "gpt-4".to_string(),
+                ModelInfo {
+                    id: "gpt-4".to_string(),
+                    name: "GPT-4".to_string(),
+                    family: "gpt-4".to_string(),
+                    reasoning: false,
+                    tool_call: true,
+                    attachment: true,
+                    vision: true,
+                    cost: ModelCost {
+                        input: 0.03,
+                        output: 0.06,
+                        cache_read: None,
+                    },
+                    limit: ModelLimit {
+                        context: 8192,
+                        output: 4096,
+                    },
                 },
-                limit: ModelLimit {
-                    context: 8192,
-                    output: 4096,
-                },
-            });
+            );
 
-            providers.insert("openai".to_string(), ProviderInfo {
-                id: "openai".to_string(),
-                name: "OpenAI".to_string(),
-                api: "https://api.openai.com/v1".to_string(),
-                env: vec!["OPENAI_API_KEY".to_string()],
-                doc: "https://docs.openai.com".to_string(),
-                models,
-            });
+            providers.insert(
+                "openai".to_string(),
+                ProviderInfo {
+                    id: "openai".to_string(),
+                    name: "OpenAI".to_string(),
+                    api: "https://api.openai.com/v1".to_string(),
+                    env: vec!["OPENAI_API_KEY".to_string()],
+                    doc: "https://docs.openai.com".to_string(),
+                    models,
+                },
+            );
         } // Write lock is released here
 
         let model = registry.get_model("openai", "gpt-4").await;
@@ -495,17 +815,21 @@ mod tests {
         let registry1 = ModelRegistry::new();
         let registry2 = ModelRegistry::new();
 
-        registry1.add_provider(ProviderConfig {
-            provider_id: "openai".to_string(),
-            api_key: "key1".to_string(),
-            base_url: None,
-        }).await;
+        registry1
+            .add_provider(ProviderConfig {
+                provider_id: "openai".to_string(),
+                api_key: "key1".to_string(),
+                base_url: None,
+            })
+            .await;
 
-        registry2.add_provider(ProviderConfig {
-            provider_id: "anthropic".to_string(),
-            api_key: "key2".to_string(),
-            base_url: None,
-        }).await;
+        registry2
+            .add_provider(ProviderConfig {
+                provider_id: "anthropic".to_string(),
+                api_key: "key2".to_string(),
+                base_url: None,
+            })
+            .await;
 
         let configs1 = registry1.provider_configs.read().await;
         let configs2 = registry2.provider_configs.read().await;

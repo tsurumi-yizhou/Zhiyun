@@ -10,3 +10,6 @@ serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
+
+# LLM endpoint abstraction for AI-based skill classification
+endpoint = { path = "../common/endpoint" }

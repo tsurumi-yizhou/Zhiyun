@@ -229,6 +229,14 @@ mod tests {
     #[tokio::test]
     async fn test_execute_echo() {
         let manager = LocalProcessManager::new();
+
+        #[cfg(target_os = "windows")]
+        let output = manager
+            .execute("cmd", &["/c", "echo", "hello", "world"])
+            .await
+            .unwrap();
+
+        #[cfg(not(target_os = "windows"))]
         let output = manager.execute("echo", &["hello", "world"]).await.unwrap();
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -240,6 +248,14 @@ mod tests {
     #[tokio::test]
     async fn test_execute_with_error() {
         let manager = LocalProcessManager::new();
+
+        #[cfg(target_os = "windows")]
+        let output = manager
+            .execute("cmd", &["/c", "dir", ":\\nonexistent"])
+            .await
+            .unwrap();
+
+        #[cfg(not(target_os = "windows"))]
         let output = manager.execute("ls", &["/nonexistent"]).await.unwrap();
 
         // 应该有错误输出
@@ -249,13 +265,23 @@ mod tests {
     #[tokio::test]
     async fn test_execute_with_cwd() {
         let mut manager = LocalProcessManager::new();
-        manager.with_cwd(PathBuf::from("/tmp"));
+        let temp_dir = std::env::temp_dir();
+        manager.with_cwd(temp_dir.clone());
 
+        #[cfg(target_os = "windows")]
+        let output = manager.execute("cmd", &["/c", "cd"]).await.unwrap();
+
+        #[cfg(not(target_os = "windows"))]
         let output = manager.execute("pwd", &[]).await.unwrap();
+
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-        // macOS 上 /tmp 是符号链接指向 /private/tmp
-        assert!(stdout == "/tmp" || stdout == "/private/tmp");
+        // 验证工作目录被设置（Windows 和 Unix 的路径表示可能不同）
+        #[cfg(target_os = "windows")]
+        assert!(stdout.to_lowercase().contains("temp") || stdout.contains("TMP"));
+
+        #[cfg(not(target_os = "windows"))]
+        assert!(stdout.contains("/tmp"));
     }
 
     #[tokio::test]
@@ -263,12 +289,24 @@ mod tests {
         let mut manager = LocalProcessManager::new();
         manager.with_env("TEST_VAR".to_string(), "test_value".to_string());
 
+        #[cfg(target_os = "windows")]
+        let output = manager
+            .execute("cmd", &["/c", "echo", "%TEST_VAR%"])
+            .await
+            .unwrap();
+
+        #[cfg(not(target_os = "windows"))]
         let output = manager
             .execute("sh", &["-c", "echo $TEST_VAR"])
             .await
             .unwrap();
+
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
+        #[cfg(target_os = "windows")]
+        assert_eq!(stdout, "test_value");
+
+        #[cfg(not(target_os = "windows"))]
         assert_eq!(stdout, "test_value");
     }
 
@@ -276,6 +314,13 @@ mod tests {
     async fn test_execute_stream() {
         let manager = LocalProcessManager::new();
 
+        #[cfg(target_os = "windows")]
+        let mut stream = manager
+            .execute_stream("cmd", &["/c", "echo", "streaming", "test"])
+            .await
+            .unwrap();
+
+        #[cfg(not(target_os = "windows"))]
         let mut stream = manager
             .execute_stream("echo", &["streaming", "test"])
             .await
@@ -301,9 +346,9 @@ mod tests {
         let mut manager = LocalProcessManager::new();
         manager.with_timeout(1); // 1秒超时
 
-        // 在 Linux/Mac 上使用 sleep，Windows 上使用 timeout
+        // 在 Linux/Mac 上使用 sleep，Windows 上使用 ping（timeout 命令不会超时）
         #[cfg(target_os = "windows")]
-        let result = manager.execute("timeout", &["10"]).await;
+        let result = manager.execute("ping", &["-n", "15", "127.0.0.1"]).await;
 
         #[cfg(not(target_os = "windows"))]
         let result = manager.execute("sleep", &["10"]).await;

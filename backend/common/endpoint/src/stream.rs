@@ -1,6 +1,6 @@
 // Streaming and response types for LLM endpoint
-use serde::{Deserialize, Serialize};
 use crate::traits::*;
+use serde::{Deserialize, Serialize};
 
 // ============================================================================
 // Chat Response Types
@@ -203,7 +203,11 @@ mod tests {
         };
 
         match event {
-            ChatStreamEvent::Choice { index, message: _, finish_reason } => {
+            ChatStreamEvent::Choice {
+                index,
+                message: _,
+                finish_reason,
+            } => {
                 assert_eq!(index, 0);
                 assert_eq!(finish_reason, "stop");
             }
@@ -250,7 +254,10 @@ mod tests {
 
         assert_eq!(config.provider_id, "openai");
         assert_eq!(config.api_key, "sk-test");
-        assert_eq!(config.base_url, Some("https://api.openai.com/v1".to_string()));
+        assert_eq!(
+            config.base_url,
+            Some("https://api.openai.com/v1".to_string())
+        );
     }
 
     #[test]

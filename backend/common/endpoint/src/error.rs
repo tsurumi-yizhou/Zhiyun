@@ -8,9 +8,7 @@ pub enum EndpointError {
     NetworkError(String),
 
     #[error("Authentication failed for provider: {provider_id}")]
-    AuthenticationFailed {
-        provider_id: String,
-    },
+    AuthenticationFailed { provider_id: String },
 
     #[error("Rate limit exceeded for provider: {provider_id}")]
     RateLimitExceeded {
@@ -64,7 +62,10 @@ mod tests {
         let err = EndpointError::AuthenticationFailed {
             provider_id: "openai".to_string(),
         };
-        assert_eq!(err.to_string(), "Authentication failed for provider: openai");
+        assert_eq!(
+            err.to_string(),
+            "Authentication failed for provider: openai"
+        );
     }
 
     #[test]

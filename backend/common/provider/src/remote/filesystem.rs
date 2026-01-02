@@ -39,11 +39,13 @@ impl RemoteFileProvider {
         if path.is_absolute() {
             path.to_string_lossy().to_string()
         } else {
+            // 使用 Unix 风格的路径分隔符（远程系统通常是 Unix）
             self.ssh_config
                 .work_dir
                 .join(path)
                 .to_string_lossy()
                 .to_string()
+                .replace('\\', "/")
         }
     }
 

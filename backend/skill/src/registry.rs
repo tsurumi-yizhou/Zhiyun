@@ -213,7 +213,12 @@ mod tests {
     #[test]
     fn test_register_and_retrieve() {
         let mut registry = SkillRegistry::new();
-        let skill = create_test_skill(SkillCategory::Syntax, "test_skill", "Rust", vec!["test"]);
+        let skill = create_test_skill(
+            SkillCategory::new("Syntax"),
+            "test_skill",
+            "Rust",
+            vec!["test"],
+        );
 
         let id = skill.id.clone();
         registry.register(skill).unwrap();
@@ -227,7 +232,7 @@ mod tests {
     fn test_index_consistency() {
         let mut registry = SkillRegistry::new();
         let skill = create_test_skill(
-            SkillCategory::Syntax,
+            SkillCategory::new("Syntax"),
             "parse_macro",
             "Rust",
             vec!["macro", "syntax"],
@@ -236,7 +241,7 @@ mod tests {
         registry.register(skill.clone()).unwrap();
 
         // Check category index
-        let by_cat = registry.by_category(SkillCategory::Syntax);
+        let by_cat = registry.by_category(SkillCategory::new("Syntax"));
         assert_eq!(by_cat.len(), 1);
         assert_eq!(by_cat[0].name, "parse_macro");
 
@@ -254,7 +259,7 @@ mod tests {
         let mut registry = SkillRegistry::new();
         registry
             .register(create_test_skill(
-                SkillCategory::Syntax,
+                SkillCategory::new("Syntax"),
                 "parse_rust",
                 "Rust",
                 vec!["parser"],
@@ -262,7 +267,7 @@ mod tests {
             .unwrap();
         registry
             .register(create_test_skill(
-                SkillCategory::Semantic,
+                SkillCategory::new("Semantic"),
                 "type_check",
                 "Rust",
                 vec!["types"],
@@ -270,7 +275,7 @@ mod tests {
             .unwrap();
         registry
             .register(create_test_skill(
-                SkillCategory::Syntax,
+                SkillCategory::new("Syntax"),
                 "parse_python",
                 "Python",
                 vec!["parser"],
@@ -287,8 +292,8 @@ mod tests {
     fn test_register_all() {
         let mut registry = SkillRegistry::new();
         let skills = vec![
-            create_test_skill(SkillCategory::Syntax, "skill1", "Rust", vec![]),
-            create_test_skill(SkillCategory::Semantic, "skill2", "Rust", vec![]),
+            create_test_skill(SkillCategory::new("Syntax"), "skill1", "Rust", vec![]),
+            create_test_skill(SkillCategory::new("Semantic"), "skill2", "Rust", vec![]),
         ];
 
         registry.register_all(skills).unwrap();

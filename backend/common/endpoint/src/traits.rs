@@ -74,8 +74,13 @@ pub enum MessageRole {
 #[serde(untagged)]
 pub enum MessageContent {
     Text(String),
-    Image { url: String, detail: Option<ImageDetail> },
-    File { local_id: String },
+    Image {
+        url: String,
+        detail: Option<ImageDetail>,
+    },
+    File {
+        local_id: String,
+    },
     MultiModal(Vec<ContentPart>),
 }
 
@@ -83,9 +88,16 @@ pub enum MessageContent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentPart {
-    Text { text: String },
-    ImageUrl { url: String, detail: Option<ImageDetail> },
-    FileRef { local_id: String },
+    Text {
+        text: String,
+    },
+    ImageUrl {
+        url: String,
+        detail: Option<ImageDetail>,
+    },
+    FileRef {
+        local_id: String,
+    },
 }
 
 /// Image detail level
@@ -132,6 +144,27 @@ pub struct FunctionDefinition {
     pub name: String,
     pub description: String,
     pub parameters: serde_json::Value,
+}
+
+// ============================================================================
+// Routing Model Types
+// ============================================================================
+
+/// Model routing result with priority-ordered model IDs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelRoutingResult {
+    /// Primary model choice (highest priority)
+    pub primary: String,
+    /// Secondary fallback options (priority order)
+    pub fallbacks: Vec<String>,
+}
+
+/// Task category for routing decisions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskCategory {
+    pub name: String,
+    pub description: String,
+    pub preferred_models: Vec<String>,
 }
 
 // ============================================================================
@@ -416,7 +449,10 @@ mod tests {
 
         assert_eq!(state.filename, "test.txt");
         assert_eq!(state.provider_files.len(), 1);
-        assert_eq!(state.provider_files.get("openai").unwrap().file_id, "file-abc");
+        assert_eq!(
+            state.provider_files.get("openai").unwrap().file_id,
+            "file-abc"
+        );
     }
 
     #[test]

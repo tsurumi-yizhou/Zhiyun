@@ -1,0 +1,45 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Test",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--workspace"
+                ]
+            },
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cargo check"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Binary",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--workspace"
+                ]
+            },
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cargo check"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Example",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=${fileBasenameNoExtension}"
+                ]
+            },
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cargo check"
+        }
+    ]
+}

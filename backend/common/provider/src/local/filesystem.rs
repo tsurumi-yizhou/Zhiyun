@@ -1,8 +1,10 @@
 use crate::traits::{FileMetadata, FileProvider, ProviderError};
 use async_trait::async_trait;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 /// 本地文件系统提供者
 ///
@@ -120,11 +122,16 @@ impl FileProvider for LocalFileProvider {
                 path: resolved.display().to_string(),
             })?;
 
+        #[cfg(unix)]
+        let permissions = Some(metadata.permissions().mode());
+        #[cfg(not(unix))]
+        let permissions = None;
+
         Ok(FileMetadata {
             size: metadata.len(),
             is_dir: metadata.is_dir(),
             is_file: metadata.is_file(),
-            permissions: Some(metadata.permissions().mode()),
+            permissions,
             modified: metadata.modified().ok(),
             created: metadata.created().ok(),
             accessed: metadata.accessed().ok(),

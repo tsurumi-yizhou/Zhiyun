@@ -165,25 +165,25 @@ impl SkillInjector {
 
         for keyword in syntax_keywords {
             if task_lower.contains(keyword) {
-                *scores.entry(SkillCategory::Syntax).or_insert(0) += 1;
+                *scores.entry(SkillCategory::new("Syntax")).or_insert(0) += 1;
             }
         }
 
         for keyword in semantic_keywords {
             if task_lower.contains(keyword) {
-                *scores.entry(SkillCategory::Semantic).or_insert(0) += 1;
+                *scores.entry(SkillCategory::new("Semantic")).or_insert(0) += 1;
             }
         }
 
         for keyword in refactoring_keywords {
             if task_lower.contains(keyword) {
-                *scores.entry(SkillCategory::Refactoring).or_insert(0) += 1;
+                *scores.entry(SkillCategory::new("Refactoring")).or_insert(0) += 1;
             }
         }
 
         for keyword in project_keywords {
             if task_lower.contains(keyword) {
-                *scores.entry(SkillCategory::Project).or_insert(0) += 1;
+                *scores.entry(SkillCategory::new("Project")).or_insert(0) += 1;
             }
         }
 
@@ -192,7 +192,7 @@ impl SkillInjector {
             .into_iter()
             .max_by_key(|(_, score)| *score)
             .map(|(cat, _)| cat)
-            .unwrap_or(SkillCategory::LanguageSpecific)
+            .unwrap_or(SkillCategory::new("LanguageSpecific"))
     }
 }
 
@@ -236,7 +236,7 @@ mod tests {
                 "Test Skill",
                 "A test skill",
                 "Test content",
-                SkillCategory::Syntax,
+                SkillCategory::new("Syntax"),
             ))
             .unwrap();
 
@@ -259,7 +259,7 @@ mod tests {
             "Test Skill",
             "A test skill",
             "Test content",
-            SkillCategory::Syntax,
+            SkillCategory::new("Syntax"),
         );
 
         let injector = SkillInjector::new(SkillRegistry::new());
@@ -278,20 +278,20 @@ mod tests {
         let injector = SkillInjector::new(SkillRegistry::new());
 
         assert_eq!(
-            injector.infer_category("Parse the syntax tree"),
-            SkillCategory::Syntax
+            injector.infer_category("Parse the syntax tree").as_str(),
+            "Syntax"
         );
         assert_eq!(
-            injector.infer_category("Type check this code"),
-            SkillCategory::Semantic
+            injector.infer_category("Type check this code").as_str(),
+            "Semantic"
         );
         assert_eq!(
-            injector.infer_category("Refactor this function"),
-            SkillCategory::Refactoring
+            injector.infer_category("Refactor this function").as_str(),
+            "Refactoring"
         );
         assert_eq!(
-            injector.infer_category("Project structure"),
-            SkillCategory::Project
+            injector.infer_category("Project structure").as_str(),
+            "Project"
         );
     }
 
