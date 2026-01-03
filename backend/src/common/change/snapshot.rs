@@ -45,10 +45,10 @@ impl Snapshot {
                         return Some(found);
                     }
                 }
-                if let Some(b) = body {
-                    if let Some(found) = self.find_node_recursive(b, id) {
-                        return Some(found);
-                    }
+                if let Some(b) = body
+                    && let Some(found) = self.find_node_recursive(b, id)
+                {
+                    return Some(found);
                 }
             }
             MetaNode::Class { members, .. } => {
@@ -89,10 +89,10 @@ mod tests {
         if let MetaNode::Module { children, .. } = &mut root {
             children.push(node);
         }
-        
+
         let snapshot = Snapshot::mock(root);
         let found = snapshot.find_node(node_id).unwrap();
-        
+
         if let MetaNode::Identifier { name, .. } = found {
             assert_eq!(name, "test");
         } else {

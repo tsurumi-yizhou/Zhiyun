@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use sha2::{Sha256, Digest};
 use crate::common::change::operation::Operation;
 use crate::common::change::version::VectorClock;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 /// 变动数据结构
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -48,16 +48,16 @@ impl Change {
     /// 计算变动的哈希值
     pub fn calculate_hash(&self) -> String {
         let mut hasher = Sha256::new();
-        
+
         // 序列化关键字段进行哈希
         hasher.update(self.author_id.as_bytes());
         hasher.update(self.timestamp.to_rfc3339().as_bytes());
-        
+
         // 序列化操作列表
         if let Ok(ops_json) = serde_json::to_string(&self.operations) {
             hasher.update(ops_json.as_bytes());
         }
-        
+
         // 序列化版本和父节点
         if let Ok(version_json) = serde_json::to_string(&self.version) {
             hasher.update(version_json.as_bytes());
@@ -90,9 +90,9 @@ mod tests {
         let author_id = Uuid::new_v4();
         let op = Operation::mock("test", "data");
         let change = Change::new(author_id, vec![op], VectorClock::new(), Vec::new());
-        
+
         assert!(change.verify_hash());
-        
+
         // 篡改数据应导致校验失败
         let mut tampered = change.clone();
         tampered.hash = "invalid_hash".to_string();

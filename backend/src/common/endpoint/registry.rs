@@ -5,6 +5,12 @@ pub struct ModelRegistry {
     models: HashMap<String, ModelInfo>,
 }
 
+impl Default for ModelRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModelRegistry {
     pub fn new() -> Self {
         Self {
@@ -21,7 +27,10 @@ impl ModelRegistry {
     }
 
     pub fn list_by_provider(&self, provider: &str) -> Vec<&ModelInfo> {
-        self.models.values().filter(|m| m.provider == provider).collect()
+        self.models
+            .values()
+            .filter(|m| m.provider == provider)
+            .collect()
     }
 }
 
@@ -30,9 +39,17 @@ pub struct ProviderRegistry {
     providers: HashMap<String, crate::common::endpoint::traits::ProviderInfo>,
 }
 
+impl Default for ProviderRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProviderRegistry {
     pub fn new() -> Self {
-        Self { providers: HashMap::new() }
+        Self {
+            providers: HashMap::new(),
+        }
     }
 
     pub fn register(&mut self, provider: crate::common::endpoint::traits::ProviderInfo) {

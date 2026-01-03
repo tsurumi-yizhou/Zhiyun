@@ -1,4 +1,4 @@
-use crate::common::provider::traits::{ExecutionProvider, ExecuteOptions, ExecuteResult};
+use crate::common::provider::traits::{ExecuteOptions, ExecuteResult, ExecutionProvider};
 use async_trait::async_trait;
 use std::process::Stdio;
 use tokio::process::Command;
@@ -7,15 +7,19 @@ pub struct LocalProcess;
 
 #[async_trait]
 impl ExecutionProvider for LocalProcess {
-    async fn execute(&self, command: &str, options: ExecuteOptions) -> anyhow::Result<ExecuteResult> {
+    async fn execute(
+        &self,
+        command: &str,
+        options: ExecuteOptions,
+    ) -> anyhow::Result<ExecuteResult> {
         let mut parts = command.split_whitespace();
-        let program = parts.next().ok_or_else(|| anyhow::anyhow!("Empty command"))?;
+        let program = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Empty command"))?;
         let args: Vec<&str> = parts.collect();
 
         let mut cmd = Command::new(program);
-        cmd.args(args)
-           .stdout(Stdio::piped())
-           .stderr(Stdio::piped());
+        cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
 
         if let Some(cwd) = options.cwd {
             cmd.current_dir(cwd);
@@ -50,7 +54,7 @@ mod tests {
     async fn test_local_process_execution() {
         let process = LocalProcess;
         let options = ExecuteOptions::default();
-        
+
         // 使用 echo 测试 (跨平台性较好)
         #[cfg(windows)]
         let cmd = "cmd /c echo hello";
@@ -67,7 +71,7 @@ mod tests {
         let process = LocalProcess;
         let mut env = HashMap::new();
         env.insert("TEST_VAR".to_string(), "test_value".to_string());
-        
+
         let options = ExecuteOptions {
             env,
             ..Default::default()
@@ -76,9 +80,9 @@ mod tests {
         #[cfg(windows)]
         let cmd = "cmd /c echo %TEST_VAR%";
         #[cfg(not(windows))]
-        let cmd = "sh -c echo $TEST_VAR";
+        let cmd = "env";
 
         let result = process.execute(cmd, options).await.unwrap();
-        assert!(result.stdout.trim().contains("test_value"));
+        assert!(result.stdout.contains("TEST_VAR=test_value"));
     }
 }

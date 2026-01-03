@@ -11,6 +11,7 @@
 //! - [`merge`] - CRDT 合并引擎
 //! - [`snapshot`] - 从变动序列生成快照
 
+#[allow(clippy::module_inception)]
 pub mod change;
 pub mod merge;
 pub mod operation;

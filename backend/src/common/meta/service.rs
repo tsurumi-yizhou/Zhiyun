@@ -28,6 +28,12 @@ pub struct ServiceManager {
     services: Arc<RwLock<HashMap<String, Arc<dyn Service>>>>,
 }
 
+impl Default for ServiceManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServiceManager {
     pub fn new() -> Self {
         Self {

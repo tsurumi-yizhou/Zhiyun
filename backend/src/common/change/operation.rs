@@ -22,6 +22,10 @@ pub enum Operation {
         new_parent_id: Option<Uuid>,
         new_index: usize,
     },
+    /// 文件写入操作
+    FileWrite { path: String, content: Vec<u8> },
+    /// 文件删除操作
+    FileDelete { path: String },
     /// 自定义 Mock 操作
     Mock { kind: String, data: String },
 }
@@ -29,7 +33,11 @@ pub enum Operation {
 impl Operation {
     /// 创建插入操作
     pub fn insert(parent_id: Option<Uuid>, index: usize, node: MetaNode) -> Self {
-        Operation::Insert { parent_id, index, node }
+        Operation::Insert {
+            parent_id,
+            index,
+            node,
+        }
     }
 
     /// 创建更新操作
@@ -44,7 +52,21 @@ impl Operation {
 
     /// 创建移动操作
     pub fn r#move(node_id: Uuid, new_parent_id: Option<Uuid>, new_index: usize) -> Self {
-        Operation::Move { node_id, new_parent_id, new_index }
+        Operation::Move {
+            node_id,
+            new_parent_id,
+            new_index,
+        }
+    }
+
+    /// 创建文件写入操作
+    pub fn file_write(path: String, content: Vec<u8>) -> Self {
+        Operation::FileWrite { path, content }
+    }
+
+    /// 创建文件删除操作
+    pub fn file_delete(path: String) -> Self {
+        Operation::FileDelete { path }
     }
 
     pub fn mock(kind: &str, data: &str) -> Self {

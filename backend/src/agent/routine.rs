@@ -4,7 +4,6 @@ use uuid::Uuid;
 
 pub type RoutineId = Uuid;
 
-/// Agent 运行时的“进程”抽象
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Routine {
     pub id: RoutineId,
@@ -31,5 +30,3 @@ impl Routine {
         }
     }
 }
-
-pub mod executor;

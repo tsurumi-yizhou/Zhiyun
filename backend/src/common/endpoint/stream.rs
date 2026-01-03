@@ -1,5 +1,5 @@
+use crate::common::endpoint::traits::{ChatMessage, ToolCall, Usage};
 use serde::{Deserialize, Serialize};
-use crate::common::endpoint::traits::{ChatMessage, Usage, ToolCall};
 
 /// 聊天流增量内容
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

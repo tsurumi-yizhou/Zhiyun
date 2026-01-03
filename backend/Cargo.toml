@@ -4,41 +4,41 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# Error Handling
+# 错误处理
 anyhow = "1.0.100"
 thiserror = "2.0.17"
 
-# Serialization
+# 序列化
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.148"
 serde_yaml = "0.9"
 schemars = "0.8"
 
-# Data Types
+# 数据类型
 uuid = { version = "1.19.0", features = ["v4", "serde"] }
 chrono = { version = "0.4.42", features = ["serde"] }
 lazy_static = "1.5"
 
-# Async / IO
+# 异步 / IO
 tokio = { version = "1.48.0", features = ["full"] }
 async-trait = "0.1.89"
 futures = "0.3"
 tokio-stream = "0.1"
 async-stream = "0.3"
 
-# CRDT / Text
+# CRDT / 差异
 yrs = "0.25.0"
 diff = "0.1"
 
-# Database / Knowledge
+# 数据库 / 知识
 qdrant-client = "1.16"
 surrealdb = { version = "2.1", features = ["kv-mem"] }
 
-# Network / AI
+# 网络 / AI
 async-openai = "0.26"
 reqwest = { version = "0.12", features = ["json"] }
 
-# Provider specific (Remote / SSH)
+# 提供商特定（远程 / SSH）
 russh = { version = "0.45", optional = true }
 russh-sftp = { version = "2.0", optional = true }
 sha2 = "0.10.8"

@@ -1,5 +1,5 @@
 use crate::skill::registry::SkillRegistry;
-use crate::skill::types::{Skill, SkillCategory};
+use crate::skill::traits::{Skill, SkillCategory};
 use std::sync::Arc;
 
 /// 技能注入配置
@@ -88,7 +88,7 @@ impl SkillInjector {
     pub fn format_skills(&self, skills: &[Arc<Skill>]) -> String {
         skills
             .iter()
-            .map(|skill| self.format_skill(skill.as_ref()))
+            .map(|skill: &Arc<Skill>| self.format_skill(skill.as_ref()))
             .collect::<Vec<_>>()
             .join("\n\n---\n\n")
     }
@@ -199,7 +199,7 @@ impl SkillInjector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::skill::types::{SkillExample, SkillId, SkillMetadata};
+    use crate::skill::traits::{SkillExample, SkillId, SkillMetadata};
     use std::collections::HashSet;
 
     fn create_test_skill(

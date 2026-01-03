@@ -13,6 +13,12 @@ pub struct PluginRegistry {
     plugins: Arc<RwLock<HashMap<String, Arc<dyn Plugin>>>>,
 }
 
+impl Default for PluginRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PluginRegistry {
     pub fn new() -> Self {
         Self {

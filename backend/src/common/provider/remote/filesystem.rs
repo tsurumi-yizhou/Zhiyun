@@ -1,4 +1,4 @@
-use crate::common::provider::traits::{StorageProvider, FileMetadata};
+use crate::common::provider::traits::{FileMetadata, StorageProvider};
 use async_trait::async_trait;
 
 pub struct RemoteFileSystem;

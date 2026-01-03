@@ -4,7 +4,7 @@ use thiserror::Error;
 pub enum EndpointError {
     #[error("Model not found: {0}")]
     ModelNotFound(String),
-    
+
     #[error("Provider error: {0}")]
     ProviderError(String),
 
@@ -41,7 +41,10 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let err = EndpointError::ContextWindowExceeded { limit: 4096, requested: 5000 };
+        let err = EndpointError::ContextWindowExceeded {
+            limit: 4096,
+            requested: 5000,
+        };
         assert!(err.to_string().contains("limit 4096"));
         assert!(err.to_string().contains("requested 5000"));
     }

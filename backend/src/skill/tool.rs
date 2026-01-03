@@ -1,7 +1,8 @@
 use crate::skill::loader::SkillLoader;
 use crate::skill::state::SkillState;
-use crate::skill::types::SkillCategory;
-use crate::skill::{SkillError, SkillId};
+use crate::skill::traits::SkillCategory;
+use crate::skill::traits::SkillError;
+use crate::skill::traits::SkillId;
 use async_trait::async_trait;
 use serde_json::Value;
 use serde_json::json;
@@ -421,11 +422,11 @@ impl Default for SkillToolRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::skill::types::{SkillExample, SkillMetadata};
+    use crate::skill::traits::{Skill, SkillExample, SkillMetadata};
     use std::collections::HashSet;
 
-    fn create_test_skill(name: &str) -> crate::skill::Skill {
-        crate::skill::Skill {
+    fn create_test_skill(name: &str) -> Skill {
+        Skill {
             id: SkillId::new(SkillCategory::new("Syntax"), name, "Rust"),
             name: name.into(),
             description: format!("{} skill", name),

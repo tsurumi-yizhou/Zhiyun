@@ -59,7 +59,11 @@ pub struct ExecuteResult {
 #[async_trait]
 pub trait ExecutionProvider: Send + Sync {
     /// 执行命令
-    async fn execute(&self, command: &str, options: ExecuteOptions) -> anyhow::Result<ExecuteResult>;
+    async fn execute(
+        &self,
+        command: &str,
+        options: ExecuteOptions,
+    ) -> anyhow::Result<ExecuteResult>;
 
     /// 终止当前运行的任务（如果支持）
     async fn kill(&self, task_id: &str) -> anyhow::Result<()>;
@@ -72,11 +76,21 @@ mod tests {
     struct MockStorage;
     #[async_trait]
     impl StorageProvider for MockStorage {
-        fn id(&self) -> &str { "mock" }
-        async fn read_file(&self, _path: &str) -> anyhow::Result<Vec<u8>> { Ok(vec![]) }
-        async fn write_file(&self, _path: &str, _content: &[u8]) -> anyhow::Result<()> { Ok(()) }
-        async fn delete(&self, _path: &str, _recursive: bool) -> anyhow::Result<()> { Ok(()) }
-        async fn list_dir(&self, _path: &str) -> anyhow::Result<Vec<FileMetadata>> { Ok(vec![]) }
+        fn id(&self) -> &str {
+            "mock"
+        }
+        async fn read_file(&self, _path: &str) -> anyhow::Result<Vec<u8>> {
+            Ok(vec![])
+        }
+        async fn write_file(&self, _path: &str, _content: &[u8]) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn delete(&self, _path: &str, _recursive: bool) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn list_dir(&self, _path: &str) -> anyhow::Result<Vec<FileMetadata>> {
+            Ok(vec![])
+        }
         async fn get_metadata(&self, path: &str) -> anyhow::Result<FileMetadata> {
             Ok(FileMetadata {
                 path: path.to_string(),
@@ -86,8 +100,12 @@ mod tests {
                 created_at: 0,
             })
         }
-        async fn exists(&self, _path: &str) -> anyhow::Result<bool> { Ok(true) }
-        async fn create_dir(&self, _path: &str, _recursive: bool) -> anyhow::Result<()> { Ok(()) }
+        async fn exists(&self, _path: &str) -> anyhow::Result<bool> {
+            Ok(true)
+        }
+        async fn create_dir(&self, _path: &str, _recursive: bool) -> anyhow::Result<()> {
+            Ok(())
+        }
     }
 
     #[tokio::test]

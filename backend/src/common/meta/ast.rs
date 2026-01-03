@@ -135,7 +135,10 @@ mod tests {
     fn test_identifier_creation() {
         let node = MetaNode::identifier("foo");
         let id = node.id();
-        if let MetaNode::Identifier { name, id: node_id, .. } = node {
+        if let MetaNode::Identifier {
+            name, id: node_id, ..
+        } = node
+        {
             assert_eq!(name, "foo");
             assert_eq!(id, node_id);
         } else {

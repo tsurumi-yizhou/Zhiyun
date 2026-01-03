@@ -1,6 +1,10 @@
-use crate::skill::types::{Skill, SkillCategory, SkillError, SkillExample, SkillId, SkillMetadata};
+use crate::common::provider::traits::StorageProvider;
+use crate::skill::traits::{
+    Skill, SkillCategory, SkillError, SkillExample, SkillId, SkillMetadata,
+};
 use serde::Deserialize;
 use std::path::Path;
+use std::sync::Arc;
 
 /// 加载技能的配置
 #[derive(Debug, Clone, Deserialize)]
@@ -15,16 +19,22 @@ pub struct SkillConfig {
 }
 
 /// 用于从各种来源解析技能的技能加载器
-pub struct SkillLoader;
+pub struct SkillLoader {
+    storage: Arc<dyn StorageProvider>,
+}
 
 impl SkillLoader {
+    pub fn new(storage: Arc<dyn StorageProvider>) -> Self {
+        Self { storage }
+    }
+
     /// 从配置加载技能
-    pub fn from_config(config: &SkillConfig) -> Result<Vec<Skill>, SkillError> {
+    pub async fn from_config(&self, config: &SkillConfig) -> Result<Vec<Skill>, SkillError> {
         let mut skills = Vec::new();
 
         // 从文件加载
         for file_path in &config.files {
-            let file_skills = Self::load_from_file(Path::new(file_path))?;
+            let file_skills = self.load_from_file(Path::new(file_path)).await?;
             skills.extend(file_skills);
         }
 
@@ -38,8 +48,19 @@ impl SkillLoader {
     }
 
     /// 从文件加载单个技能（YAML 或 JSON）
-    pub fn load_from_file(path: &Path) -> Result<Vec<Skill>, SkillError> {
-        let content = std::fs::read_to_string(path)?;
+    pub async fn load_from_file(&self, path: &Path) -> Result<Vec<Skill>, SkillError> {
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| SkillError::ParseError("Invalid path encoding".into()))?;
+
+        let content_bytes = self
+            .storage
+            .read_file(path_str)
+            .await
+            .map_err(|e| SkillError::ParseError(format!("Failed to read skill file: {}", e)))?;
+
+        let content = String::from_utf8(content_bytes)
+            .map_err(|e| SkillError::ParseError(format!("Skill file is not valid UTF-8: {}", e)))?;
 
         let extension = path
             .extension()
@@ -77,9 +98,7 @@ impl SkillLoader {
             return Ok(skills);
         }
 
-        Err(SkillError::ParseError(
-            "技能的 YAML 格式无效".into(),
-        ))
+        Err(SkillError::ParseError("技能的 YAML 格式无效".into()))
     }
 
     /// 从 JSON 字符串加载单个技能
@@ -170,6 +189,43 @@ impl RawSkill {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::provider::traits::FileMetadata;
+    use async_trait::async_trait;
+
+    struct MockStorage;
+    #[async_trait]
+    impl StorageProvider for MockStorage {
+        fn id(&self) -> &str {
+            "mock"
+        }
+        async fn read_file(&self, _path: &str) -> anyhow::Result<Vec<u8>> {
+            Ok(YAML_SKILL.as_bytes().to_vec())
+        }
+        async fn write_file(&self, _path: &str, _content: &[u8]) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn delete(&self, _path: &str, _recursive: bool) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn list_dir(&self, _path: &str) -> anyhow::Result<Vec<FileMetadata>> {
+            Ok(vec![])
+        }
+        async fn get_metadata(&self, _path: &str) -> anyhow::Result<FileMetadata> {
+            Ok(FileMetadata {
+                path: _path.to_string(),
+                size: 0,
+                is_dir: false,
+                modified_at: 0,
+                created_at: 0,
+            })
+        }
+        async fn exists(&self, _path: &str) -> anyhow::Result<bool> {
+            Ok(true)
+        }
+        async fn create_dir(&self, _path: &str, _recursive: bool) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
 
     const YAML_SKILL: &str = r#"
 id:
@@ -231,6 +287,15 @@ metadata:
         assert!(skill.metadata.tags.contains("macro"));
     }
 
+    #[tokio::test]
+    async fn test_load_from_file() {
+        let storage = Arc::new(MockStorage);
+        let loader = SkillLoader::new(storage);
+        let skills = loader.load_from_file(Path::new("test.yaml")).await.unwrap();
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].name, "Rust macro_rules! Syntax");
+    }
+
     #[test]
     fn test_load_from_json() {
         let skill = SkillLoader::load_from_json(JSON_SKILL.to_string()).unwrap();
@@ -242,14 +307,16 @@ metadata:
         assert_eq!(skill.related_tools[0], "syntax::parse");
     }
 
-    #[test]
-    fn test_from_config() {
+    #[tokio::test]
+    async fn test_from_config() {
+        let storage = Arc::new(MockStorage);
+        let loader = SkillLoader::new(storage);
         let config = SkillConfig {
             files: vec![],
             inline_skills: vec![serde_json::from_str(JSON_SKILL).unwrap()],
         };
 
-        let skills = SkillLoader::from_config(&config).unwrap();
+        let skills = loader.from_config(&config).await.unwrap();
         assert_eq!(skills.len(), 1);
     }
 

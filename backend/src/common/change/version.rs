@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use std::cmp::Ordering;
+use std::collections::HashMap;
+use uuid::Uuid;
 
 /// 因果关系定义
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

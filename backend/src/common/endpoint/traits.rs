@@ -15,8 +15,13 @@ pub enum MessageRole {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentPart {
-    Text { text: String },
-    ImageUrl { url: String, detail: Option<ImageDetail> },
+    Text {
+        text: String,
+    },
+    ImageUrl {
+        url: String,
+        detail: Option<ImageDetail>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -122,15 +127,37 @@ pub struct EmbeddingResponse {
 }
 pub type EmbeddingUsage = Usage;
 pub type FileContentResponse = Vec<u8>;
-pub struct FileDeletionStatus { pub id: String, pub deleted: bool }
-pub struct FileObject { pub id: String, pub bytes: u32, pub filename: String, pub purpose: String }
+pub struct FileDeletionStatus {
+    pub id: String,
+    pub deleted: bool,
+}
+pub struct FileObject {
+    pub id: String,
+    pub bytes: u32,
+    pub filename: String,
+    pub purpose: String,
+}
 pub type FilePurpose = String;
 pub type FileState = String;
-pub struct FileUploadRequest { pub filename: String, pub purpose: String, pub content: Vec<u8> }
-pub struct FunctionDefinition { pub name: String, pub description: Option<String>, pub parameters: serde_json::Value }
+pub struct FileUploadRequest {
+    pub filename: String,
+    pub purpose: String,
+    pub content: Vec<u8>,
+}
+pub struct FunctionDefinition {
+    pub name: String,
+    pub description: Option<String>,
+    pub parameters: serde_json::Value,
+}
 pub type ModelCost = f64;
 pub type ModelLimit = u32;
-pub struct ModelRoutingResult { pub model_id: String, pub priority: u32 }
+pub struct ModelRoutingResult {
+    pub model_id: String,
+    pub priority: u32,
+}
 pub type ProviderFileState = String;
 pub type TaskCategory = String;
-pub struct ToolDefinition { pub r#type: String, pub function: FunctionDefinition }
+pub struct ToolDefinition {
+    pub r#type: String,
+    pub function: FunctionDefinition,
+}

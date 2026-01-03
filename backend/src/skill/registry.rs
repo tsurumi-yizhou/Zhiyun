@@ -1,4 +1,4 @@
-use crate::skill::types::{Skill, SkillCategory, SkillError, SkillId};
+use crate::skill::traits::{Skill, SkillCategory, SkillError, SkillId};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -186,7 +186,7 @@ fn calculate_relevance(skill: &Skill, task: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::skill::types::SkillMetadata;
+    use crate::skill::traits::SkillMetadata;
 
     fn create_test_skill(
         category: SkillCategory,

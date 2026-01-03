@@ -1,8 +1,8 @@
-use crate::common::provider::traits::{StorageProvider, FileMetadata};
+use crate::common::provider::traits::{FileMetadata, StorageProvider};
 use async_trait::async_trait;
 use std::path::PathBuf;
-use tokio::fs;
 use std::time::UNIX_EPOCH;
+use tokio::fs;
 
 pub struct LocalFileSystem {
     base_path: PathBuf,
@@ -63,7 +63,8 @@ impl StorageProvider for LocalFileSystem {
 
         while let Some(entry) = entries.next_entry().await? {
             let meta = entry.metadata().await?;
-            let path = entry.path()
+            let path = entry
+                .path()
                 .strip_prefix(&self.base_path)?
                 .to_string_lossy()
                 .into_owned();
@@ -73,7 +74,10 @@ impl StorageProvider for LocalFileSystem {
                 size: meta.len(),
                 is_dir: meta.is_dir(),
                 modified_at: meta.modified()?.duration_since(UNIX_EPOCH)?.as_secs(),
-                created_at: meta.created().map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()).unwrap_or(0),
+                created_at: meta
+                    .created()
+                    .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs())
+                    .unwrap_or(0),
             });
         }
         Ok(result)
@@ -87,7 +91,10 @@ impl StorageProvider for LocalFileSystem {
             size: meta.len(),
             is_dir: meta.is_dir(),
             modified_at: meta.modified()?.duration_since(UNIX_EPOCH)?.as_secs(),
-            created_at: meta.created().map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()).unwrap_or(0),
+            created_at: meta
+                .created()
+                .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs())
+                .unwrap_or(0),
         })
     }
 

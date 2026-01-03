@@ -1,5 +1,7 @@
 pub mod agent;
 pub mod common;
+pub mod compiler;
+pub mod editor;
 pub mod knowledge;
 pub mod project;
 pub mod semantic;

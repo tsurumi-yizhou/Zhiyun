@@ -1,7 +1,8 @@
 use crate::skill::injector::SkillInjector;
 use crate::skill::loader::SkillConfig;
+use crate::skill::loader::SkillLoader;
 use crate::skill::registry::SkillRegistry;
-use crate::skill::{SkillError, SkillLoader};
+use crate::skill::traits::SkillError;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::RwLock;
@@ -21,8 +22,12 @@ impl SkillState {
     }
 
     /// 从配置预加载技能（在程序启动时调用）
-    pub async fn preload_from_config(config: &SkillConfig) -> Result<(), SkillError> {
-        let skills = SkillLoader::from_config(config)?;
+    pub async fn preload_from_config(
+        config: &SkillConfig,
+        storage: Arc<dyn crate::common::provider::traits::StorageProvider>,
+    ) -> Result<(), SkillError> {
+        let loader = SkillLoader::new(storage);
+        let skills = loader.from_config(config).await?;
         let mut state = Self::get().write().await;
         state.registry.register_all(skills)
     }
@@ -53,8 +58,7 @@ impl SkillState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::skill::types::{SkillExample, SkillId, SkillMetadata};
-    use crate::skill::{Skill, SkillCategory};
+    use crate::skill::traits::{Skill, SkillCategory, SkillExample, SkillId, SkillMetadata};
     use std::collections::HashSet;
 
     #[test]
@@ -103,7 +107,44 @@ mod tests {
 
     #[tokio::test]
     async fn test_preload_from_config() {
+        use crate::common::provider::traits::FileMetadata;
+        use async_trait::async_trait;
         use serde_json::json;
+
+        struct MockStorage;
+        #[async_trait]
+        impl crate::common::provider::traits::StorageProvider for MockStorage {
+            fn id(&self) -> &str {
+                "mock"
+            }
+            async fn read_file(&self, _path: &str) -> anyhow::Result<Vec<u8>> {
+                Ok(vec![])
+            }
+            async fn write_file(&self, _path: &str, _content: &[u8]) -> anyhow::Result<()> {
+                Ok(())
+            }
+            async fn delete(&self, _path: &str, _recursive: bool) -> anyhow::Result<()> {
+                Ok(())
+            }
+            async fn list_dir(&self, _path: &str) -> anyhow::Result<Vec<FileMetadata>> {
+                Ok(vec![])
+            }
+            async fn get_metadata(&self, _path: &str) -> anyhow::Result<FileMetadata> {
+                Ok(FileMetadata {
+                    path: _path.to_string(),
+                    size: 0,
+                    is_dir: false,
+                    modified_at: 0,
+                    created_at: 0,
+                })
+            }
+            async fn exists(&self, _path: &str) -> anyhow::Result<bool> {
+                Ok(true)
+            }
+            async fn create_dir(&self, _path: &str, _recursive: bool) -> anyhow::Result<()> {
+                Ok(())
+            }
+        }
 
         // 获取初始计数
         let state = SkillState::get().read().await;
@@ -131,7 +172,10 @@ mod tests {
             })],
         };
 
-        SkillState::preload_from_config(&config).await.unwrap();
+        let storage = Arc::new(MockStorage);
+        SkillState::preload_from_config(&config, storage)
+            .await
+            .unwrap();
 
         // 检查是否至少加载了一个新技能
         // （由于并行测试共享全局状态，无法使用确切计数）
